@@ -1,0 +1,9 @@
+#pragma once
+
+// Macros rather than constants so consumers can test them in #if.
+// NOLINTBEGIN(modernize-macro-to-enum)
+#define KI_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define KI_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define KI_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define KI_VERSION_STRING "@PROJECT_VERSION@"
+// NOLINTEND(modernize-macro-to-enum)

@@ -1,0 +1,10 @@
+/build/
+/out/
+/test_package/build/
+/test_package/CMakeUserPresets.json
+/CMakeUserPresets.json
+/vcpkg_installed/
+/.cache/
+compile_commands.json
+__pycache__/
+.DS_Store
