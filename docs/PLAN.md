@@ -98,7 +98,7 @@ ki/
 
 ## Phases
 
-Platform key: **L** Linux (GCC 14, Clang 18+), **M** macOS (Apple Clang), **W** Windows (MSVC 17.10+).
+Platform key: **L** Linux (GCC 14, Clang 19+; Clang 18 lacks `std::expected` with libstdc++), **M** macOS (Apple Clang), **W** Windows (MSVC 17.10+).
 "Local" means verified on the development Mac before the phase is reported done; everything else is
 verified by CI once a remote exists.
 

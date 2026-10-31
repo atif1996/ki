@@ -13,7 +13,7 @@ jobs:
       matrix:
         config:
           - { name: linux-gcc-14, os: ubuntu-24.04, cc: gcc-14, cxx: g++-14 }
-          - { name: linux-clang-18, os: ubuntu-24.04, cc: clang-18, cxx: clang++-18 }
+          - { name: linux-clang-19, os: ubuntu-24.04, cc: clang-19, cxx: clang++-19, apt: clang-19 }
           - { name: macos, os: macos-15 }
           - { name: windows-msvc, os: windows-2025 }
         linkage: [shared, static]
@@ -29,6 +29,9 @@ jobs:
           python-version: "3.12"
       - name: Install Conan
         run: pip install "conan>=2.33,<3"
+      - name: Install compiler
+        if: matrix.config.apt
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.config.apt }}
       - name: Conan profile
         run: |
           if [ -n "${{ matrix.config.cc }}" ]; then

@@ -70,7 +70,8 @@ These examples are compiled and run as part of the test suite (`tests/readme_tes
 
 ## Requirements
 
-- A C++23 compiler: GCC 14+, Clang 18+, Apple Clang 17+, MSVC 17.10+
+- A C++23 compiler: GCC 14+, Clang 19+, Apple Clang 17+, MSVC 17.10+ (Clang 18 lacks `std::expected`
+  with GCC's standard library)
 - CMake 3.25+
 - Conan 2 (primary) or vcpkg (manifest mode)
 
@@ -111,6 +112,16 @@ target_link_libraries(app PRIVATE ki::ki)
 ```
 
 ki requires C++23 and passes that requirement to every target that links it.
+
+## Linux builds on a Mac
+
+`scripts/linux_check.py` runs the CI Linux steps (GCC 14 and Clang 19 on Ubuntu 24.04) in a local
+container through any Docker engine, such as Colima:
+
+```sh
+python3 scripts/linux_check.py                  # both compilers
+python3 scripts/linux_check.py --compiler gcc-14
+```
 
 ## Repository checks
 
