@@ -134,7 +134,8 @@ blocked on a missing remote).
 Deliverables: `ki::Error`, `ki::Result`, `ki::Request` (method, target, headers, query, per-request
 context map, streaming body), `ki::Response` (status, headers, streaming writes, flush, state
 machine), `ki::Handler`, `ki::Middleware`, `ki::test::Recorder` (the `httptest.ResponseRecorder`
-analogue), `ki::log` (Logger, Sink, null/text/json sinks), the observer interface.
+analogue), `ki::log` (Logger, Sink, null/text/json sinks, AsyncSink). The observer interface moved to
+Phase 5 (T5.18), where the server fires its connection events.
 
 | ID | Test | Passes when |
 |---|---|---|
@@ -156,8 +157,7 @@ analogue), `ki::log` (Logger, Sink, null/text/json sinks), the observer interfac
 | T1.16 | Attribute lifetime | The async sink copies borrowed attributes; ASan stays clean when the caller's strings are destroyed right after the call |
 | T1.17 | Flush on shutdown | Every record logged before shutdown is present in the output afterwards |
 | T1.18 | Concurrent logging | Many threads logging at once produce no torn records; TSan clean |
-| T1.19 | Allocation count | Allocations per access-log line are measured and tracked; a regression against the previous baseline is flagged |
-| T1.20 | Observer hooks | Each connection and request lifecycle event fires exactly once, in order, with correct fields (recorder and loopback server) |
+| T1.19 | Allocation count | Allocations per access-log line are measured and tracked; a regression against the previous baseline is flagged. Measured once the counting allocator lands with T2.14 |
 
 #### Request target, query and form parsing
 
@@ -308,6 +308,7 @@ graceful shutdown, `ConnState` hooks. Tests are black-box over loopback.
 | T5.15 | Allocation count | Allocations per steady-state plaintext request are measured and reported next to the Go reference's |
 | T5.16 | Close and reject reasons | Each timeout, limit and smuggling case in Phases 5 and 6 fires the observer with the matching reason, and the Prometheus close/reject counters increment accordingly |
 | T5.17 | Host header | An HTTP/1.1 request with a missing, duplicated or invalid `Host` gets 400 and the connection is closed; CONNECT targets are accepted in authority form (go: `TestServerValidatesHostHeader`, `TestRequestBadHostHeader`) |
+| T5.18 | Observer hooks | Each connection and request lifecycle event (connection accepted, closed with reason, request started, finished, rejected with reason) fires exactly once, in order, with correct fields, over a loopback server and through the recorder. Moved from Phase 1, where no connection events exist yet |
 
 Done when: all T5 tests pass on L M W, timing tests pass 100 consecutive runs without flaking.
 

@@ -14,6 +14,7 @@ add_executable(ki-tests
   context_test.cpp
   form_test.cpp
   headers_test.cpp
+  log_test.cpp
   query_test.cpp
   readme_test.cpp
   response_test.cpp

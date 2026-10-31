@@ -12,3 +12,6 @@ Checks: >
   performance-*
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*/include/ki/.*'
+CheckOptions:
+  # An explicit (void) cast marks a result ignored on purpose, such as a sink error when a log record is dropped.
+  bugprone-unused-return-value.AllowCastToVoid: true

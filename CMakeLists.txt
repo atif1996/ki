@@ -31,6 +31,7 @@ configure_file(cmake/version.hpp.in "${PROJECT_BINARY_DIR}/include/ki/version.hp
 target_sources(ki
   PRIVATE
     src/headers.cpp
+    src/log.cpp
     src/query.cpp
     src/request.cpp
     src/response.cpp
@@ -47,6 +48,7 @@ target_sources(ki
       include/ki/handler.hpp
       include/ki/headers.hpp
       include/ki/ki.hpp
+      include/ki/log.hpp
       include/ki/query.hpp
       include/ki/request.hpp
       include/ki/response.hpp
