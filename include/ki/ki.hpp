@@ -5,9 +5,11 @@
 #include <ki/export.hpp>
 #include <ki/handler.hpp>
 #include <ki/headers.hpp>
+#include <ki/query.hpp>
 #include <ki/request.hpp>
 #include <ki/response.hpp>
 #include <ki/status.hpp>
+#include <ki/url.hpp>
 #include <ki/version.hpp>
 
 #include <string_view>

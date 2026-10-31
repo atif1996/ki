@@ -45,11 +45,12 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Area | Decision |
 |---|---|
 | I/O | Standalone Asio 1.38.2, C++20 coroutines, one `io_context` per core. |
-| HTTP/1.1 parsing | llhttp (zero-copy views into the read buffer, handles pipelined input). Not Boost.Beast. |
+| HTTP/1.1 parsing | llhttp (handles pipelined input). Not Boost.Beast. |
+| Copying | Minimal copying: pass `std::string_view`, move rather than copy, avoid copies that serve no purpose. There is no zero-copy goal: where avoiding a copy would make an API harder to use or open the door to dangling views, ki copies. Performance work is driven by the Phase 7 benchmarks, not done speculatively. |
 | JSON / BSON | Glaze, optional (`ki::json`), behind a Conan option and vcpkg feature. Exception-free; also covers BSON, CBOR, MessagePack. Pin the same version in both package managers (Conan Center has 8.4.0, vcpkg has 9.0.0 — use a vcpkg `overrides` entry). |
 | Pattern grammar | chi's grammar is the base, so chi route tables port unchanged: `{name}`, params sharing a segment with literals (`{id}.json`, `{file}.{ext}`, `{id}-{aux}`), regex constraints (`{id:[0-9]+}`), trailing `*`, and an optional method prefix (`"GET /path"`). Go's additions: `{name...}` as a named catch-all, and `{$}` on opt-in subtree routes. Host matching lives in a separate `HostRouter`, not in the pattern. |
 | Regex params | RE2 2025-11-05 in v1 (linear time, no exceptions, syntax close to Go's `regexp`, which chi uses). Never `std::regex` (throws, ReDoS). RE2 brings abseil as a transitive dependency. |
-| URL, query and form encoding | ki's own percent-encoding and decoding in v1: zero-copy views when no decoding is needed, Go-strict on invalid escapes, used for query strings, URL-encoded form bodies, path values and redirect URLs. Hosts are matched as ASCII only (no IDNA). Ada (WHATWG URL parser) is deferred to later. |
+| URL, query and form encoding | ki's own percent-encoding and decoding in v1, Go-strict on invalid escapes; decoded values are owned strings, used for query strings, URL-encoded form bodies, path values and redirect URLs. Hosts are matched as ASCII only (no IDNA). Ada (WHATWG URL parser) is deferred to later. |
 | Precedence and conflicts | chi's order per segment: static → regex → param → catch-all, with backtracking. Registration rejects what is decidable (identical patterns, the same shape with different param names, invalid regex) with an error naming both patterns. Overlap between two regexes is not decidable, so ki does not promise Go's "no ambiguous routes" guarantee. |
 | Trailing slash | chi semantics: `/a` and `/a/` are distinct routes. Go's subtree semantics (`/files/` matches everything below, `/files` redirects with the query kept) are opt-in per route. |
 | HEAD and path cleaning | Opt-in middleware as in chi (GetHead, CleanPath), enabled in the example server's default stack. |
@@ -155,7 +156,7 @@ analogue), `ki::log` (Logger, Sink, null/text/json sinks), the observer interfac
 | T1.16 | Attribute lifetime | The async sink copies borrowed attributes; ASan stays clean when the caller's strings are destroyed right after the call |
 | T1.17 | Flush on shutdown | Every record logged before shutdown is present in the output afterwards |
 | T1.18 | Concurrent logging | Many threads logging at once produce no torn records; TSan clean |
-| T1.19 | No steady-state allocation | Logging an access-log line allocates nothing after warm-up |
+| T1.19 | Allocation count | Allocations per access-log line are measured and tracked; a regression against the previous baseline is flagged |
 | T1.20 | Observer hooks | Each connection and request lifecycle event fires exactly once, in order, with correct fields (recorder and loopback server) |
 
 #### Request target, query and form parsing
@@ -169,7 +170,7 @@ Parsing is lazy (on first access) and done once per request; parse errors are re
 | T1.22 | Query values | `?a=1&a=2&b=&c` gives `a=[1,2]`, `b=[""]`, `c=[""]`; repeated values keep their order; `+` and `%20` decode to space and `%2B` to `+`; keys are decoded too; an empty or absent query yields no values | `TestParseQuery`, `TestQueryValues`, `TestQuery`, `TestUnescape` |
 | T1.23 | Malformed query | An invalid escape (`%zz`) returns an error naming the bad pair, and the valid pairs remain readable; `;` is not a separator and returns an error, as in Go since 1.17, unless an opt-in AllowQuerySemicolons middleware is used | `TestParseQuery` (error cases), `TestQuerySemicolon`, `TestParseFormSemicolonSeparator` |
 | T1.24 | Query and target limits | More than 10,000 parameters returns an error (Go's default `urlmaxqueryparams`), configurable; a request target over the configured length gets 414 | `TestParseQueryLimits` |
-| T1.25 | Query API | `get` returns the first value, `get_all` every value, `has` presence; values that need no decoding are returned as views into the request buffer without allocation; typed access (`query<int>("page")`, `path_value<int>("id")`) returns an error for non-numeric or out-of-range input | — |
+| T1.25 | Query API | `get` returns the first value, `get_all` every value, `has` presence; returned views stay valid while the values live, including after the container is moved or copied; typed access (`get_as<int>("page")`, and `path_value<int>("id")` with the router in T2.23) returns an error for missing, non-numeric or out-of-range input | — |
 | T1.26 | Escaping round trip | Query and path escaping used by redirects and URL building round-trips every byte value; encoding sorts keys deterministically | `TestEncodeQuery`, `TestQueryEscape`, `TestPathEscape` |
 | T1.27 | URL-encoded form bodies | For POST, PUT and PATCH with `application/x-www-form-urlencoded`, `form()` merges body and query with body values first and `post_form()` holds the body only; other methods and unknown content types parse the query only, without error; the form body is capped (Go's 10 MB default, configurable); a parse error leaves the form empty but initialised | `TestParseFormQuery`, `TestParseFormQueryMethods`, `TestPostQuery`, `TestParseFormUnknownContentType`, `TestParseFormInitializeOnError` |
 
@@ -201,7 +202,7 @@ tests in `serve_test.go` (Go 1.26). Each ported case carries a `// chi: TestName
 | T2.11 | Introspection | `TestMuxMatch*`, `TestMuxFind`, `TestWalker`, `TestWalk*`, `TestRoutesHidesMountStub`, `TestRoutePattern`, `TestReplaceWildcardsConsecutive` |
 | T2.12 | Large route table | `TestMuxBig` |
 | T2.13 | Concurrent matching | `TestMuxContextIsThreadSafe`; must also pass under TSan |
-| T2.14 | Allocation-free matching | Matching a static or param route performs zero heap allocations (counting allocator) |
+| T2.14 | Allocation count | Allocations per route match are measured with a counting allocator and tracked; a regression against the previous baseline is flagged |
 | T2.15 | chi API completeness: `Handle` matches every method; `Handle("GET /path")` method prefix; every verb helper including CONNECT, TRACE, OPTIONS; `Middlewares()`; `Chain()`; route-path rewriting by middleware (chi's `RoutePath`); existing and base request context | `TestServeHTTPExistingContext`, `TestServerBaseContext`, `TestContext_Clone`, plus new cases |
 | T2.16 | Go grammar additions: `{name...}` named catch-all; `{$}` on subtree routes; pattern parse errors reported with offset and reason | go: `TestParsePattern`, `TestParsePatternError` (cases that apply to ki's grammar) |
 | T2.17 | Conflicts and precedence: decidable conflicts return an error naming both patterns and leave the router unchanged; mixed static/regex/param/catch-all routes resolve in chi's documented order | go: `TestConflictsWith`, `TestRegisterConflict`, `TestDescribeConflict`, `TestComparePaths` (decidable cases); chi: `TestTreeMoar` ordering cases |
@@ -257,7 +258,7 @@ client disconnects before the response is complete is counted with `status="abor
 | T3.11d | Route pattern | Requests to `/users/1` and `/users/2` share one `route="/users/{id}"` series; a mounted sub-router reports the full pattern |
 | T3.11e | Cardinality bound | 100,000 requests with random paths and methods create at most routes × known methods × observed statuses series |
 | T3.11f | Active requests | The gauge rises while handlers are in flight and returns to 0 after they finish, including after cancellation |
-| T3.11g | Hot-path cost | Recording a request allocates nothing after warm-up |
+| T3.11g | Hot-path cost | Allocations per recorded request are measured and tracked; a regression against the previous baseline is flagged |
 | T3.11h | Per-request cost (micro) | Google Benchmark of the middleware wrapping a no-op handler versus the bare handler, at 1 and N threads. Tracked, not gated: CI flags a regression of more than 20 % against the previous baseline as an early warning. The gate is T7.7 |
 
 Done when: all T3 tests pass on L M W.
@@ -304,7 +305,7 @@ graceful shutdown, `ConnState` hooks. Tests are black-box over loopback.
 | T5.12 | Disconnect cancels | Closing the client socket mid-handler makes the handler observe `operation_aborted` within 50 ms |
 | T5.13 | Throw isolation | A throwing handler with no Recoverer closes only its own connection; a concurrent connection is still served; the process stays up |
 | T5.14 | Multi-core | With N `io_context` threads, 10,000 concurrent connections are served without errors |
-| T5.15 | Allocation budget | Steady-state plaintext request performs ≤ the Go reference's allocations per request (target: zero) |
+| T5.15 | Allocation count | Allocations per steady-state plaintext request are measured and reported next to the Go reference's |
 | T5.16 | Close and reject reasons | Each timeout, limit and smuggling case in Phases 5 and 6 fires the observer with the matching reason, and the Prometheus close/reject counters increment accordingly |
 | T5.17 | Host header | An HTTP/1.1 request with a missing, duplicated or invalid `Host` gets 400 and the connection is closed; CONNECT targets are accepted in authority form (go: `TestServerValidatesHostHeader`, `TestRequestBadHostHeader`) |
 

@@ -12,12 +12,17 @@ ki_target_warnings(ki-context-probe)
 
 add_executable(ki-tests
   context_test.cpp
+  form_test.cpp
   headers_test.cpp
+  query_test.cpp
   readme_test.cpp
   response_test.cpp
+  strings_test.cpp
   toolchain_test.cpp
+  url_test.cpp
   version_test.cpp)
 target_link_libraries(ki-tests PRIVATE ki::ki ki-context-probe llhttp::llhttp Catch2::Catch2WithMain)
+target_include_directories(ki-tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
 ki_target_warnings(ki-tests)
 catch_discover_tests(ki-tests DISCOVERY_MODE PRE_TEST)
 

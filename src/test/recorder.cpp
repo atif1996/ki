@@ -1,5 +1,7 @@
 #include <ki/test/recorder.hpp>
 
+#include "detail/strings.hpp"
+
 #include <asio/bind_cancellation_slot.hpp>
 #include <asio/cancellation_signal.hpp>
 #include <asio/co_spawn.hpp>
@@ -21,7 +23,7 @@ public:
 
     asio::awaitable<std::expected<std::size_t, Error>> read(std::span<std::byte> buffer) override {
         const std::size_t n = std::min(buffer.size(), data_.size() - offset_);
-        std::ranges::transform(std::string_view{data_}.substr(offset_, n), buffer.begin(),
+        std::ranges::transform(detail::sub(data_, offset_, n), buffer.begin(),
                                [](char c) { return static_cast<std::byte>(c); });
         offset_ += n;
         co_return n;

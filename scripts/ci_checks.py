@@ -2,7 +2,7 @@
 """Phase 0 repository checks for ki.
 
 Subcommands:
-    policy     T0.13: no ``throw`` in the library sources.
+    policy     T0.13: no ``throw`` or ``substr`` in the library sources.
     versions   T0.9: CMakeLists.txt, vcpkg.json and the Conan recipe agree on the version.
     deps       T0.12: the Conan graph and vcpkg manifest contain no forbidden dependencies.
     consumers  T0.5, T0.7, T0.8a, T0.12: install ki with plain CMake, then build and run a
@@ -34,8 +34,15 @@ def strip_comments_and_strings(source):
     return pattern.sub(lambda m: "\n" * m.group(0).count("\n"), source)
 
 
+POLICY_RULES = {
+    "throw": re.compile(r"\bthrow\b"),
+    # substr throws std::out_of_range; ki::detail::sub clamps instead.
+    "substr": re.compile(r"\.substr\("),
+}
+
+
 def check_policy(_args):
-    """Fail if any library header or source contains a throw expression."""
+    """Fail if library headers or sources throw or call substr."""
     offenders = []
     for directory in ("include", "src"):
         for path in sorted((ROOT / directory).rglob("*")):
@@ -43,12 +50,13 @@ def check_policy(_args):
                 continue
             code = strip_comments_and_strings(path.read_text(encoding="utf-8"))
             for lineno, line in enumerate(code.splitlines(), start=1):
-                if re.search(r"\bthrow\b", line):
-                    offenders.append(f"{path.relative_to(ROOT)}:{lineno}")
+                for rule, pattern in POLICY_RULES.items():
+                    if pattern.search(line):
+                        offenders.append(f"{path.relative_to(ROOT)}:{lineno} ({rule})")
     if offenders:
-        print("throw is not allowed in ki's library code:", *offenders, sep="\n  ")
+        print("not allowed in ki's library code:", *offenders, sep="\n  ")
         return 1
-    print("policy: no throw in include/ or src/")
+    print("policy: no throw or substr in include/ or src/")
     return 0
 
 

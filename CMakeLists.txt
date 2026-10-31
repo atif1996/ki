@@ -31,10 +31,12 @@ configure_file(cmake/version.hpp.in "${PROJECT_BINARY_DIR}/include/ki/version.hp
 target_sources(ki
   PRIVATE
     src/headers.cpp
+    src/query.cpp
     src/request.cpp
     src/response.cpp
     src/status.cpp
     src/test/recorder.cpp
+    src/url.cpp
     src/version.cpp
   PUBLIC
     FILE_SET HEADERS
@@ -45,14 +47,17 @@ target_sources(ki
       include/ki/handler.hpp
       include/ki/headers.hpp
       include/ki/ki.hpp
+      include/ki/query.hpp
       include/ki/request.hpp
       include/ki/response.hpp
       include/ki/status.hpp
       include/ki/test/recorder.hpp
       include/ki/transport.hpp
+      include/ki/url.hpp
       "${PROJECT_BINARY_DIR}/include/ki/export.hpp"
       "${PROJECT_BINARY_DIR}/include/ki/version.hpp")
 
+target_include_directories(ki PRIVATE src)
 target_compile_features(ki PUBLIC cxx_std_23)
 target_link_libraries(ki PUBLIC asio::asio PRIVATE llhttp::llhttp)
 
