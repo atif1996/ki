@@ -36,6 +36,7 @@ class KiConan(ConanFile):
     def requirements(self):
         self.requires("asio/1.38.2", transitive_headers=True)
         self.requires("llhttp/9.3.0")
+        self.requires("re2/20251105")
 
     def build_requirements(self):
         self.test_requires("catch2/3.16.1")
@@ -69,7 +70,7 @@ class KiConan(ConanFile):
         self.cpp_info.libs = ["ki"]
         self.cpp_info.set_property("cmake_file_name", "ki")
         self.cpp_info.set_property("cmake_target_name", "ki::ki")
-        self.cpp_info.requires = ["asio::asio", "llhttp::llhttp"]
+        self.cpp_info.requires = ["asio::asio", "llhttp::llhttp", "re2::re2"]
         if not self.options.shared:
             self.cpp_info.defines = ["KI_STATIC_DEFINE"]
         if self.settings.os == "Windows":

@@ -67,12 +67,12 @@ public:
     [[nodiscard]] KI_EXPORT std::string encode() const;
 
 private:
-    std::vector<std::pair<std::string, std::string>> entries_;
+    std::vector<std::pair<std::string, std::string>> entries_{};
 };
 
 struct ParsedQuery {
-    QueryValues values;
-    std::optional<Error> error;
+    QueryValues values{};
+    std::optional<Error> error{};
 };
 
 }  // namespace ki

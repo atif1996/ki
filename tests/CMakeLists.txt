@@ -18,6 +18,9 @@ add_executable(ki-tests
   query_test.cpp
   readme_test.cpp
   response_test.cpp
+  router_api_test.cpp
+  router_mux_test.cpp
+  router_tree_test.cpp
   strings_test.cpp
   toolchain_test.cpp
   url_test.cpp

@@ -23,8 +23,8 @@ KI_EXPORT bool valid_header_value(std::string_view value) noexcept;
 class Headers {
 public:
     struct Field {
-        std::string name;
-        std::string value;
+        std::string name{};
+        std::string value{};
     };
 
     [[nodiscard]] KI_EXPORT Result add(std::string_view name, std::string_view value);
@@ -41,7 +41,7 @@ public:
     [[nodiscard]] auto end() const noexcept { return fields_.end(); }
 
 private:
-    std::vector<Field> fields_;
+    std::vector<Field> fields_{};
 };
 
 }  // namespace ki

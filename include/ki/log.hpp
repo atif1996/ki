@@ -49,11 +49,11 @@ public:
     [[nodiscard]] const Storage& get() const noexcept { return storage_; }
 
 private:
-    Storage storage_;
+    Storage storage_{};
 };
 
 struct Attr {
-    std::string_view key;
+    std::string_view key{};
     Value value;
 };
 
@@ -61,8 +61,8 @@ namespace detail {
 
 // OwnedAttr is an Attr that owns its strings, for attributes kept beyond the logging call.
 struct OwnedAttr {
-    std::string key;
-    std::variant<std::string, std::int64_t, std::uint64_t, double, bool> value;
+    std::string key{};
+    std::variant<std::string, std::int64_t, std::uint64_t, double, bool> value{};
 };
 
 }  // namespace detail
@@ -70,10 +70,10 @@ struct OwnedAttr {
 // Record is one log event. Its strings and attributes are borrowed: a sink that keeps a record past write
 // must copy it.
 struct Record {
-    std::chrono::system_clock::time_point time;
+    std::chrono::system_clock::time_point time{};
     Level level = Level::info;
-    std::string_view message;
-    std::span<const Attr> attrs;
+    std::string_view message{};
+    std::span<const Attr> attrs{};
 };
 
 // Sinks are exported whole so their vtables are visible to code that creates or derives from them.
@@ -121,9 +121,9 @@ public:
     }
 
 private:
-    std::shared_ptr<Sink> sink_;
+    std::shared_ptr<Sink> sink_{};
     Level min_level_ = Level::info;
-    std::shared_ptr<const std::vector<detail::OwnedAttr>> bound_;
+    std::shared_ptr<const std::vector<detail::OwnedAttr>> bound_{};
 };
 
 // Writer delivers formatted bytes; text and JSON sinks write one complete line per call.
@@ -146,7 +146,7 @@ public:
     std::error_code write(const Record& record) noexcept override;
 
 private:
-    Writer writer_;
+    Writer writer_{};
 };
 
 // JsonSink writes one JSON object per line: {"time":...,"level":"INFO","msg":...,"key":value}.
@@ -156,7 +156,7 @@ public:
     std::error_code write(const Record& record) noexcept override;
 
 private:
-    Writer writer_;
+    Writer writer_{};
 };
 
 // AsyncSink hands records to a background thread, so a slow destination never blocks the caller. write
@@ -179,24 +179,24 @@ public:
 
 private:
     struct OwnedRecord {
-        std::chrono::system_clock::time_point time;
+        std::chrono::system_clock::time_point time{};
         Level level = Level::info;
-        std::string message;
-        std::vector<detail::OwnedAttr> attrs;
+        std::string message{};
+        std::vector<detail::OwnedAttr> attrs{};
     };
 
     void run(const std::stop_token& stop);
     void deliver(const OwnedRecord& record) noexcept;
 
-    std::shared_ptr<Sink> inner_;
-    std::size_t capacity_;
+    std::shared_ptr<Sink> inner_{};
+    std::size_t capacity_{};
     mutable std::mutex mutex_;
-    std::condition_variable_any ready_;
-    std::condition_variable_any idle_;
-    std::deque<OwnedRecord> queue_;
+    std::condition_variable_any ready_{};
+    std::condition_variable_any idle_{};
+    std::deque<OwnedRecord> queue_{};
     std::uint64_t dropped_ = 0;
     bool writing_ = false;
-    std::jthread worker_;
+    std::jthread worker_{};
 };
 
 }  // namespace ki::log

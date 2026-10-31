@@ -5,6 +5,7 @@
 #include <ki/export.hpp>
 #include <ki/headers.hpp>
 #include <ki/query.hpp>
+#include <ki/route_context.hpp>
 #include <ki/transport.hpp>
 #include <ki/url.hpp>
 
@@ -25,13 +26,13 @@ namespace ki {
 struct FormOptions {
     // max_body is Go's default limit for URL-encoded form bodies.
     std::size_t max_body = std::size_t{10} << 20U;
-    QueryOptions query;
+    QueryOptions query{};
 };
 
 struct ParsedForm {
-    QueryValues form;
-    QueryValues post_form;
-    std::optional<Error> error;
+    QueryValues form{};
+    QueryValues post_form{};
+    std::optional<Error> error{};
 };
 
 // Request is one HTTP request as seen by handlers and middleware.
@@ -62,6 +63,15 @@ public:
     // malformed pair; the well-formed pairs are still available.
     [[nodiscard]] KI_EXPORT const QueryValues& query() const;
     [[nodiscard]] KI_EXPORT const std::optional<Error>& query_error() const;
+
+    // route is the request's routing state, filled in by routers.
+    [[nodiscard]] RouteContext& route() noexcept { return route_; }
+    [[nodiscard]] const RouteContext& route() const noexcept { return route_; }
+    // path_value returns the value of the route parameter named key, as Go's Request.PathValue does.
+    [[nodiscard]] std::string_view path_value(std::string_view key) const noexcept { return route_.url_param(key); }
+    KI_EXPORT void set_path_value(std::string_view key, std::string_view value);
+    // route_pattern is the full pattern that matched, such as "/users/{id}", as Go's Request.Pattern.
+    [[nodiscard]] std::string route_pattern() const { return route_.route_pattern(); }
 
     [[nodiscard]] Headers& headers() noexcept { return headers_; }
     [[nodiscard]] const Headers& headers() const noexcept { return headers_; }
@@ -104,18 +114,19 @@ public:
 private:
     [[nodiscard]] const ParsedQuery& parsed_query() const;
 
-    std::string method_;
-    std::string target_;
+    std::string method_{};
+    std::string target_{};
     url::TargetForm form_ = url::TargetForm::origin;
-    std::string raw_path_;
-    std::string raw_query_;
-    std::string authority_;
-    std::optional<Error> target_error_;
-    std::optional<std::string> decoded_path_;
+    std::string raw_path_{};
+    std::string raw_query_{};
+    std::string authority_{};
+    std::optional<Error> target_error_{};
+    std::optional<std::string> decoded_path_{};
     mutable std::optional<ParsedQuery> query_;
-    Headers headers_;
-    Context context_;
-    std::unique_ptr<detail::BodySource> body_;
+    Headers headers_{};
+    Context context_{};
+    RouteContext route_{};
+    std::unique_ptr<detail::BodySource> body_{};
 };
 
 }  // namespace ki

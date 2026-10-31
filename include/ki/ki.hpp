@@ -8,6 +8,8 @@
 #include <ki/query.hpp>
 #include <ki/request.hpp>
 #include <ki/response.hpp>
+#include <ki/route_context.hpp>
+#include <ki/router.hpp>
 #include <ki/status.hpp>
 #include <ki/url.hpp>
 #include <ki/version.hpp>

@@ -49,7 +49,7 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Copying | Minimal copying: pass `std::string_view`, move rather than copy, avoid copies that serve no purpose. There is no zero-copy goal: where avoiding a copy would make an API harder to use or open the door to dangling views, ki copies. Performance work is driven by the Phase 7 benchmarks, not done speculatively. |
 | JSON / BSON | Glaze, optional (`ki::json`), behind a Conan option and vcpkg feature. Exception-free; also covers BSON, CBOR, MessagePack. Pin the same version in both package managers (Conan Center has 8.4.0, vcpkg has 9.0.0 — use a vcpkg `overrides` entry). |
 | Pattern grammar | chi's grammar is the base, so chi route tables port unchanged: `{name}`, params sharing a segment with literals (`{id}.json`, `{file}.{ext}`, `{id}-{aux}`), regex constraints (`{id:[0-9]+}`), trailing `*`, and an optional method prefix (`"GET /path"`). Go's additions: `{name...}` as a named catch-all, and `{$}` on opt-in subtree routes. Host matching lives in a separate `HostRouter`, not in the pattern. |
-| Regex params | RE2 2025-11-05 in v1 (linear time, no exceptions, syntax close to Go's `regexp`, which chi uses). Never `std::regex` (throws, ReDoS). RE2 brings abseil as a transitive dependency. |
+| Regex params | RE2 2025-11-05 in v1 (linear time, no exceptions, syntax close to Go's `regexp`, which chi uses). Never `std::regex` (throws, ReDoS). RE2 brings abseil as a transitive dependency. See [ADR 0001](adr/0001-re2-for-route-regex.md). |
 | URL, query and form encoding | ki's own percent-encoding and decoding in v1, Go-strict on invalid escapes; decoded values are owned strings, used for query strings, URL-encoded form bodies, path values and redirect URLs. Hosts are matched as ASCII only (no IDNA). Ada (WHATWG URL parser) is deferred to later. |
 | Precedence and conflicts | chi's order per segment: static → regex → param → catch-all, with backtracking. Registration rejects what is decidable (identical patterns, the same shape with different param names, invalid regex) with an error naming both patterns. Overlap between two regexes is not decidable, so ki does not promise Go's "no ambiguous routes" guarantee. |
 | Trailing slash | chi semantics: `/a` and `/a/` are distinct routes. Go's subtree semantics (`/files/` matches everything below, `/files` redirects with the query kept) are opt-in per route. |
@@ -68,6 +68,8 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Logging | `ki::log`, modelled on Go's `log/slog`: a `Sink` interface receiving structured records, a `Logger` value type with `with(attrs...)`, built-in `null` / `text` / `json` sinks, asynchronous by default. No logging-library dependency in core. Adapters for Quill or spdlog are optional extras, later. |
 | Observability hooks | Core `ki` exposes an observer interface (connection accepted/closed with reason, request started/finished, request rejected with reason). Logging and metrics build on it; core has no metrics dependency. |
 | Metrics | Optional `ki::prometheus` component on prometheus-cpp **core only** (no `pull`, no `push`, no civetweb). ki serves `/metrics` itself through `prometheus::TextSerializer`; Prometheus scrapes it. Middleware records through a ki-owned recorder interface rather than prometheus-cpp types, so a ki-native metrics data model can replace prometheus-cpp later without changing the middleware. |
+| Authentication | One `ki::auth::Principal` (subject, roles, scopes) stored per request by every authentication middleware; `require_roles` / `require_scopes` middleware attached with `use`/`with`/`group` give 401 or 403. HTTP Basic (RFC 7617) in core on libsodium (HMAC-SHA256, constant-time compare). Bearer JWT in the separate library `ki::jwt` (jwt-cpp, OpenSSL 3.x), Ed25519 by default and ES256/RSA opted into per key. ki is a resource server: no token issuing or login flows. See [ADR 0002](adr/0002-authentication-middleware.md). |
+| TLS | Terminated by a proxy in v1 (ingress, load balancer, nginx/Envoy, mesh sidecar); ki serves plain HTTP/1.1 and trusts forwarded headers only from configured proxies. In-process TLS is deferred. See [ADR 0003](adr/0003-tls-at-proxy.md). |
 
 ## Layout
 
@@ -216,6 +218,9 @@ tests in `serve_test.go` (Go 1.26). Each ported case carries a `// chi: TestName
 Done when: every chi case listed above and every Go routing test named above is ported or explicitly
 recorded as not applicable with a reason, and all pass on L M W.
 
+Deferred: chi's `TestServerBaseContext` needs a running server and moves to Phase 5. The allocation counts
+(T1.19, T2.14) are measured with the Phase 7 benchmark tooling, which brings the counting allocator.
+
 ### Phase 3 — first middleware set
 
 | ID | Middleware | Passes when | chi sources |
@@ -231,6 +236,10 @@ recorded as not applicable with a reason, and all pass on L M W.
 | T3.8 | GetHead | HEAD routed to GET handlers with no body written; matches Go's automatic HEAD-for-GET behaviour | chi: `TestGetHead`; go: `TestMatchingMethods` (HEAD cases) |
 | T3.9 | Response wrapper | Status and byte counts captured; status correct when flushed | `wrap_writer_test.go` |
 | T3.10 | Ordering | RequestID → ClientIP → Metrics → Logger → Recoverer → Timeout produces the expected log line and metric samples for a 500 and for a timeout | — |
+| T3.12 | BasicAuth | No header, malformed header (wrong scheme, bad base64, no `:`) and wrong credentials give 401 with `WWW-Authenticate: Basic realm="...", charset="UTF-8"`; valid credentials reach the handler with a Principal; `static_credentials` keeps only keyed HMAC-SHA256 digests and compares the submitted user and password against every entry with no early exit (checked by counting comparisons: the same for a known user, an unknown user and a near-miss); a realm containing `"` or control characters is rejected when the middleware is created | `TestBasicAuth` |
+| T3.14 | Crypto wrappers | ki's wrappers over libsodium produce HMAC-SHA256 values matching the RFC 4231 test cases; the constant-time comparison is correct for equal, different and different-in-the-last-byte inputs; libsodium is initialized once before first use | — |
+| T3.15 | require_https | Passes a request when a trusted proxy reports `X-Forwarded-Proto: https`; rejects it with 403 when the header says `http`, is missing, or comes from an untrusted peer | — |
+| T3.13 | Authorization | `require_roles` (all), `require_any_role` and `require_scopes`: 401 without a principal, 403 with insufficient roles or scopes, the handler runs otherwise; the same restrictions work after Basic and Bearer authentication; `walk()` reports them on each guarded route | — |
 
 #### Metrics middleware (RED)
 
@@ -263,7 +272,7 @@ client disconnects before the response is complete is counted with `status="abor
 
 Done when: all T3 tests pass on L M W.
 
-### Phase 4 — optional components: JSON and Prometheus
+### Phase 4 — optional components and libraries: JSON, Prometheus and `ki::jwt`
 
 Each component is behind a Conan option and a vcpkg feature; with all options off, ki installs with
 none of their dependencies.
@@ -283,6 +292,14 @@ none of their dependencies.
 | T4.11 | Optionality | With the metrics option off, ki builds and installs without prometheus-cpp |
 | T4.12 | No embedded server | The dependency graph (`conan graph info`, vcpkg manifest) contains no civetweb or `prometheus-cpp::pull`; at runtime the process listens only on ports ki opened |
 | T4.13 | Internal listener | `/metrics` mounted on an internal listener is not reachable through the public listener |
+| T4.14 | Valid tokens | EdDSA (Ed25519) tokens signed by a configured key are accepted by default; ES256, RS256 and PS256 tokens are accepted only for keys with that algorithm enabled and rejected otherwise; accepted tokens map to a Principal: `sub`, roles from a configurable claim path (`roles`, `realm_access.roles`), scopes from `scope` or `scp` |
+| T4.15 | Algorithm attacks | `alg: none`, an algorithm different from the key's pinned algorithm, and an HS256 token signed with an RSA public key as the secret are all rejected |
+| T4.16 | Claims | Expired, not-yet-valid (each just inside and just outside the leeway), wrong issuer, wrong audience and missing required claims are rejected |
+| T4.17 | Keys | An unknown `kid` is rejected; with several keys, `kid` selects the right one; a JWKS document that fails to parse is a configuration error at startup, not a throw |
+| T4.18 | Malformed tokens | Wrong segment count, bad base64url, invalid JSON and oversize tokens (over 8 KiB) give 401; jwt-cpp exceptions never escape (fuzzed in T6.8) |
+| T4.19 | Transport | Tokens are read only from `Authorization: Bearer`; a token in the query string is ignored |
+| T4.20 | Responses | Failures give 401 with `WWW-Authenticate: Bearer error="invalid_token"`; neither the response nor the logs contain the token |
+| T4.21 | Separate library | `ki::jwt` is its own target, found with `find_package(ki COMPONENTS jwt)`; core ki builds and installs without jwt-cpp or OpenSSL, and only applications linking `ki::jwt` get them (extends T0.12) |
 
 ### Phase 5 — server
 
@@ -362,6 +379,11 @@ It is linked only by the TechEmpower app and only with `KI_BUILD_BENCH=ON`.
 ### Later
 
 Ada (WHATWG URL parser, `url_search_params`) for full URL parsing, IDNA hosts and URL building, with a differential fuzz test against ki's own decoder (they must agree on valid input and differ only where ki rejects input WHATWG accepts).
+
+Authentication: fetching and refreshing JWKS from a URL (needs the HTTP client), token introspection
+(RFC 7662), login flows (authorization code with PKCE), and an Argon2id `verify` on libsodium.
+
+In-process TLS with `asio::ssl` and OpenSSL, as an option (ADR 0003).
 
 Multipart form parsing (go: `TestParseMultipartForm*`, `TestMultipartReader*`, `TestMissingFileMultipartRequest`, `TestFormValueCallsParseMultipartForm`), with streamed file parts and size limits.
 

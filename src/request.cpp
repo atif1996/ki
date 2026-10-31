@@ -110,6 +110,17 @@ Request::Request(std::string method, std::string target, Headers headers, std::u
     }
 }
 
+void Request::set_path_value(std::string_view key, std::string_view value) {
+    auto& params = route_.url_params;
+    for (std::size_t i = params.keys.size(); i-- > 0;) {
+        if (params.keys[i] == key) {
+            params.values[i] = std::string{value};
+            return;
+        }
+    }
+    params.add(key, value);
+}
+
 const ParsedQuery& Request::parsed_query() const {
     if (query_) {
         return *query_;

@@ -21,6 +21,7 @@ endif()
 
 find_package(asio CONFIG REQUIRED)
 find_package(llhttp CONFIG REQUIRED)
+find_package(re2 CONFIG REQUIRED)
 
 add_library(ki)
 add_library(ki::ki ALIAS ki)
@@ -35,8 +36,10 @@ target_sources(ki
     src/query.cpp
     src/request.cpp
     src/response.cpp
+    src/router.cpp
     src/status.cpp
     src/test/recorder.cpp
+    src/tree.cpp
     src/url.cpp
     src/version.cpp
   PUBLIC
@@ -52,6 +55,8 @@ target_sources(ki
       include/ki/query.hpp
       include/ki/request.hpp
       include/ki/response.hpp
+      include/ki/route_context.hpp
+      include/ki/router.hpp
       include/ki/status.hpp
       include/ki/test/recorder.hpp
       include/ki/transport.hpp
@@ -61,7 +66,7 @@ target_sources(ki
 
 target_include_directories(ki PRIVATE src)
 target_compile_features(ki PUBLIC cxx_std_23)
-target_link_libraries(ki PUBLIC asio::asio PRIVATE llhttp::llhttp)
+target_link_libraries(ki PUBLIC asio::asio PRIVATE llhttp::llhttp re2::re2)
 
 if(NOT BUILD_SHARED_LIBS)
   target_compile_definitions(ki PUBLIC KI_STATIC_DEFINE)

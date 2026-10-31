@@ -20,16 +20,16 @@ namespace ki::test {
 // Recorded is what a client would have received from a handler run by Recorder, and how the handler ended.
 struct Recorded {
     Status status = Status::ok;
-    Headers headers;
-    std::string body;
+    Headers headers{};
+    std::string body{};
     std::size_t head_writes = 0;
     std::size_t flushes = 0;
     bool finished = false;
     Response::State state = Response::State::headers_pending;
     std::uint64_t bytes_written = 0;
     // result is what the handler returned; it is meaningful only when exception is empty.
-    Result result;
-    std::exception_ptr exception;
+    Result result{};
+    std::exception_ptr exception{};
 };
 
 // make_request builds a request with an in-memory body for use with Recorder.

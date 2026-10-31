@@ -12,7 +12,7 @@ namespace ki {
 // show; cause carries internal detail for logs only.
 struct Error {
     Status status = Status::internal_server_error;
-    std::string message;
+    std::string message{};
     std::error_code cause{};
 };
 
