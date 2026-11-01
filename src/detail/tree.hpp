@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <map>
 #include <memory>
@@ -73,13 +74,32 @@ struct FindState {
     bool method_not_allowed = false;
 };
 
+// Paths and patterns are matched in a routing form: percent-escapes are decoded, as Go's ServeMux does per
+// segment, and then the characters that structure a route ('%', '/', '{', '}', '*') are re-escaped so a
+// decoded "%2F" never splits a segment and a decoded "%7B" never starts a parameter.
+
+// routing_path converts a raw request path to routing form.
+[[nodiscard]] std::string routing_path(std::string_view raw_path);
+
+// routing_pattern converts a validated pattern to routing form; "{name...}" becomes "*".
+[[nodiscard]] std::string routing_pattern(std::string_view pattern);
+
+// pattern_shape is a routing pattern with parameter names removed, so patterns that differ only in their
+// parameter names compare equal.
+[[nodiscard]] std::string pattern_shape(std::string_view routing_pattern);
+
+// decode_value turns a value captured from a routing-form path back into the text it stands for.
+[[nodiscard]] std::string decode_value(std::string_view value);
+
 class Tree {
 public:
-    // validate checks a pattern's braces, wildcard position, regexes and parameter names.
-    [[nodiscard]] static Result validate(std::string_view pattern);
+    // parse checks a pattern's braces, wildcard position, regexes and parameter names, and returns the
+    // parameter names in order.
+    [[nodiscard]] static std::expected<std::vector<std::string>, Error> parse(std::string_view pattern);
 
-    // insert adds an endpoint for a pattern that passed validate and returns the leaf node.
-    Node& insert(const Methods& methods, std::string_view pattern, const Endpoint& endpoint);
+    // insert adds an endpoint at a routing-form pattern and returns the leaf node. The endpoint carries the
+    // pattern as written and its parameter names.
+    Node& insert(const Methods& methods, std::string_view routing_pattern, const Endpoint& endpoint);
 
     [[nodiscard]] NodeRef find(std::string_view method, std::string_view path, FindState& state) const;
 

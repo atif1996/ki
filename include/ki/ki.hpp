@@ -5,6 +5,7 @@
 #include <ki/export.hpp>
 #include <ki/handler.hpp>
 #include <ki/headers.hpp>
+#include <ki/helpers.hpp>
 #include <ki/query.hpp>
 #include <ki/request.hpp>
 #include <ki/response.hpp>

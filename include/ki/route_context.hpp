@@ -21,7 +21,8 @@ struct RouteParams {
 // RouteContext is a request's routing state, chi's chi.Context. Routers fill it in as the request passes
 // through them; middleware may set route_path or route_method to change what the next router matches.
 struct RouteContext {
-    // route_path is the path the next router matches against; empty means the request's own path.
+    // route_path is the path the next router matches against; empty means the request's own path. It is in
+    // routing form: escapes decoded, except that '%', '/', '{', '}' and '*' inside a segment stay escaped.
     std::string route_path{};
     // route_method is the method routers match against; empty means the request's method.
     std::string route_method{};
@@ -31,6 +32,9 @@ struct RouteContext {
     std::vector<std::string> route_patterns{};
     // route_params holds the parameters of the most recent router's match.
     RouteParams route_params{};
+    // rest_path is what the most recent router's catch-all matched, in routing form; a mounted router
+    // continues from it.
+    std::string rest_path{};
     // active is set by the first router to handle the request; nested routers reuse the context.
     bool active = false;
 

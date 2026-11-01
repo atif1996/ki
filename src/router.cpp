@@ -1,5 +1,7 @@
 #include <ki/router.hpp>
 
+#include <ki/helpers.hpp>
+
 #include "detail/strings.hpp"
 #include "detail/tree.hpp"
 
@@ -11,8 +13,17 @@
 namespace ki::detail {
 
 // TreeState is shared by a router and the inline routers derived from it with with() and group().
+// Claim records who registered a method on a pattern shape, so duplicates can be rejected. Implicit claims
+// (a mount's trailing-slash stubs) may be overridden by an explicit route; explicit claims may not.
+struct Claim {
+    std::string pattern{};
+    bool implicit = false;
+};
+
 struct TreeState {
     Tree tree{};
+    // claims maps a pattern shape to its registered methods; "*" stands for a registration for every method.
+    std::map<std::string, std::map<std::string, Claim, std::less<>>, std::less<>> claims{};
     std::vector<std::string> methods{"CONNECT", "DELETE", "GET", "HEAD", "OPTIONS",
                                      "PATCH", "POST", "PUT", "QUERY", "TRACE"};
     std::vector<Error> errors{};
@@ -72,51 +83,19 @@ Handler method_not_allowed_of(const RouterState& state, std::vector<std::string>
     return state.method_not_allowed ? state.method_not_allowed : default_method_not_allowed(std::move(allowed));
 }
 
-// next_route_path is the path a mounted router sees: the catch-all value of the parent's match.
-std::string next_route_path(const RouteContext& context) {
-    const auto& params = context.route_params;
-    if (!params.keys.empty() && params.keys.back() == "*" && params.values.size() >= params.keys.size()) {
-        return "/" + params.values[params.keys.size() - 1];
-    }
-    return "/";
-}
-
-bool is_unreserved(char c) noexcept {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.' ||
-           c == '_' || c == '~';
-}
-
-// escaped_path is Go's url.PathEscape-style encoding for whole paths (encodePath mode).
-std::string escaped_path(std::string_view path) {
-    constexpr std::string_view hex = "0123456789ABCDEF";
-    std::string out{};
-    for (const char c : path) {
-        if (is_unreserved(c) || std::string_view{"$&+,/:;=@"}.find(c) != std::string_view::npos) {
-            out.push_back(c);
-        } else {
-            const auto byte = static_cast<unsigned char>(c);
-            out.push_back('%');
-            out.push_back(hex[byte >> 4U]);
-            out.push_back(hex[byte & 0xFU]);
-        }
-    }
-    return out;
-}
-
-// routing_path is the path chi routes on: Go's URL.RawPath when the raw path is not the default encoding of
-// the decoded path (so "%2F" stays distinct from "/"), otherwise the decoded path.
-std::string_view routing_path(const Request& req) {
-    const auto raw = req.raw_path();
-    const auto decoded = req.path();
-    if (raw == decoded || escaped_path(decoded) == raw) {
-        return decoded;
-    }
-    return raw;
-}
+// next_route_path is the path a mounted router sees: what the parent's catch-all matched.
+std::string next_route_path(const RouteContext& context) { return "/" + context.rest_path; }
 
 void record_match(RouteContext& context, const detail::FindState& found) {
     context.route_params.keys = found.keys;
-    context.route_params.values.assign(found.values.begin(), found.values.end());
+    context.route_params.values.clear();
+    for (const auto value : found.values) {
+        context.route_params.values.push_back(detail::decode_value(value));
+    }
+    context.rest_path.clear();
+    if (!found.keys.empty() && found.keys.back() == "*" && found.values.size() >= found.keys.size()) {
+        context.rest_path = std::string{found.values[found.keys.size() - 1]};
+    }
 }
 
 // handler_for returns the endpoint serving method on node, if it has a handler.
@@ -134,7 +113,7 @@ std::optional<std::reference_wrapper<const detail::Endpoint>> handler_for(const 
 
 asio::awaitable<Result> route_request(std::shared_ptr<RouterState> state, Request& req, Response& res) {
     auto& context = req.route();
-    std::string path = context.route_path.empty() ? std::string{routing_path(req)} : context.route_path;
+    std::string path = context.route_path.empty() ? detail::routing_path(req.raw_path()) : context.route_path;
     if (path.empty()) {
         path = "/";
     }
@@ -217,7 +196,59 @@ struct Registration {
     std::string_view pattern{};
     Handler handler{};
     std::uint64_t id = 0;
+    bool implicit = false;
 };
+
+std::string describe(const detail::Methods& methods, std::string_view pattern) {
+    return (methods.all ? std::string{} : methods.names.front() + " ") + std::string{pattern};
+}
+
+// check_claim decides which methods a registration sets on a shape, or reports the registration it
+// conflicts with. An explicit registration for every method skips methods already registered explicitly,
+// so the more specific route keeps them, as Go's ServeMux prefers a method-specific pattern.
+std::expected<std::vector<std::string>, std::string> check_claim(const detail::TreeState& shared, const std::string& shape,
+                                                                 const Registration& registration) {
+    const auto existing = shared.claims.find(shape);
+    const auto conflict = [&](const std::string& method, const detail::Claim& claim) {
+        return std::unexpected("pattern '" + describe(registration.methods, registration.pattern) + "' conflicts with '" +
+                               (method == "*" ? std::string{} : method + " ") + claim.pattern + "', registered earlier");
+    };
+    if (existing == shared.claims.end()) {
+        return registration.methods.names;
+    }
+    if (registration.implicit) {
+        const auto& [method, claim] = *existing->second.begin();
+        return conflict(method, claim);
+    }
+    if (!registration.methods.all) {
+        const auto& name = registration.methods.names.front();
+        if (const auto it = existing->second.find(name); it != existing->second.end() && !it->second.implicit) {
+            return conflict(name, it->second);
+        }
+        return registration.methods.names;
+    }
+    if (const auto it = existing->second.find("*"); it != existing->second.end() && !it->second.implicit) {
+        return conflict("*", it->second);
+    }
+    std::vector<std::string> names;
+    for (const auto& name : registration.methods.names) {
+        const auto it = existing->second.find(name);
+        if (it == existing->second.end() || it->second.implicit) {
+            names.push_back(name);
+        }
+    }
+    return names;
+}
+
+void commit_claim(detail::TreeState& shared, const std::string& shape, const Registration& registration) {
+    auto& methods = shared.claims[shape];
+    const detail::Claim claim{.pattern = std::string{registration.pattern}, .implicit = registration.implicit};
+    if (registration.methods.all) {
+        methods.insert_or_assign("*", claim);
+    } else {
+        methods.insert_or_assign(registration.methods.names.front(), claim);
+    }
+}
 
 // add_route is chi's handle(): validate, build the router handler on first use, wrap inline middlewares,
 // and insert. It returns the leaf node, or nothing when the registration was rejected and recorded.
@@ -236,8 +267,16 @@ std::optional<std::reference_wrapper<detail::Node>> add_route(const std::shared_
         record(*state, "routing pattern must begin with '/' in '" + std::string{registration.pattern} + "'");
         return std::nullopt;
     }
-    if (auto valid = detail::Tree::validate(registration.pattern); !valid) {
-        shared.errors.push_back(std::move(valid.error()));
+    auto keys = detail::Tree::parse(registration.pattern);
+    if (!keys) {
+        shared.errors.push_back(std::move(keys.error()));
+        return std::nullopt;
+    }
+    const auto routing = detail::routing_pattern(registration.pattern);
+    const auto shape = detail::pattern_shape(routing);
+    auto names = check_claim(shared, shape, registration);
+    if (!names) {
+        record(*state, std::move(names.error()));
         return std::nullopt;
     }
 
@@ -245,7 +284,9 @@ std::optional<std::reference_wrapper<detail::Node>> add_route(const std::shared_
         build_route_handler(state);
     }
     detail::Endpoint endpoint{.endpoint = registration.handler,
-                              .id = registration.id != 0 ? registration.id : shared.next_id++};
+                              .id = registration.id != 0 ? registration.id : shared.next_id++,
+                              .pattern = std::string{registration.pattern},
+                              .param_keys = std::move(*keys)};
     if (state->is_inline) {
         state->handler = router_handler(state);
         endpoint.handler = chain(state->middlewares, registration.handler);
@@ -253,7 +294,10 @@ std::optional<std::reference_wrapper<detail::Node>> add_route(const std::shared_
     } else {
         endpoint.handler = registration.handler;
     }
-    return shared.tree.insert(registration.methods, registration.pattern, endpoint);
+    detail::Methods methods = registration.methods;
+    methods.names = std::move(*names);
+    commit_claim(shared, shape, registration);
+    return shared.tree.insert(methods, routing, endpoint);
 }
 
 detail::Methods every_method(const RouterState& state, bool stub = false) {
@@ -276,8 +320,8 @@ std::optional<std::string> find_in(const RouterState& state, RouteContext& conte
     if (!endpoint) {
         return std::nullopt;
     }
-    for (std::size_t i = 0; i < found.keys.size() && i < found.values.size(); ++i) {
-        context.url_params.add(found.keys[i], found.values[i]);
+    for (std::size_t i = 0; i < context.route_params.keys.size() && i < context.route_params.values.size(); ++i) {
+        context.url_params.add(context.route_params.keys[i], context.route_params.values[i]);
     }
     if (!node->get().subroutes) {
         return endpoint->get().pattern;
@@ -432,7 +476,8 @@ void mount_impl(const std::shared_ptr<RouterState>& state, std::string_view patt
         record(*state, "routing pattern must begin with '/' in '" + base + "'");
         return;
     }
-    if (shared.tree.find_pattern(base + "*") || shared.tree.find_pattern(base + "/*")) {
+    if (shared.tree.find_pattern(detail::routing_pattern(base + "*")) ||
+        shared.tree.find_pattern(detail::routing_pattern(base + "/*"))) {
         record(*state, "attempting to mount() a handler on an existing path, '" + base + "'");
         return;
     }
@@ -441,9 +486,24 @@ void mount_impl(const std::shared_ptr<RouterState>& state, std::string_view patt
         return;
     }
     const std::string mount_pattern = base.ends_with('/') ? base : base + "/";
-    if (auto valid = detail::Tree::validate(mount_pattern + "*"); !valid) {
-        shared.errors.push_back(std::move(valid.error()));
+    const std::string wildcard = mount_pattern + "*";
+    if (auto keys = detail::Tree::parse(wildcard); !keys) {
+        shared.errors.push_back(std::move(keys.error()));
         return;
+    }
+    // Check every pattern the mount registers before registering any, so a rejected mount adds nothing.
+    std::vector<Registration> registrations;
+    if (!base.ends_with('/')) {
+        registrations.push_back({.methods = every_method(*state, true), .pattern = base, .implicit = true});
+        registrations.push_back({.methods = every_method(*state, true), .pattern = mount_pattern, .implicit = true});
+    }
+    registrations.push_back({.methods = every_method(*state, static_cast<bool>(sub)), .pattern = wildcard});
+    for (const auto& registration : registrations) {
+        const auto shape = detail::pattern_shape(detail::routing_pattern(registration.pattern));
+        if (auto names = check_claim(shared, shape, registration); !names) {
+            record(*state, std::move(names.error()));
+            return;
+        }
     }
 
     if (sub && !sub->not_found && state->not_found) {
@@ -465,16 +525,12 @@ void mount_impl(const std::shared_ptr<RouterState>& state, std::string_view patt
     };
 
     const auto id = shared.next_id++;
-    if (!base.ends_with('/')) {
-        (void)add_route(state, {.methods = every_method(*state, true), .pattern = base, .handler = mount_handler, .id = id});
-        (void)add_route(state,
-                        {.methods = every_method(*state, true), .pattern = mount_pattern, .handler = mount_handler, .id = id});
+    std::optional<std::reference_wrapper<detail::Node>> node;
+    for (auto& registration : registrations) {
+        registration.handler = mount_handler;
+        registration.id = id;
+        node = add_route(state, registration);
     }
-    const std::string wildcard = mount_pattern + "*";
-    const auto node = add_route(state, {.methods = every_method(*state, static_cast<bool>(sub)),
-                                        .pattern = wildcard,
-                                        .handler = mount_handler,
-                                        .id = id});
     if (node && sub) {
         node->get().subroutes = sub;
     }
@@ -498,6 +554,50 @@ void Router::handle(std::string_view pattern, Handler handler) {
         return;
     }
     (void)add_route(state_, {.methods = every_method(*state_), .pattern = pattern, .handler = std::move(handler)});
+}
+
+void Router::subtree(std::string_view pattern, Handler handler) {
+    detail::Methods methods = every_method(*state_);
+    std::string_view path = pattern;
+    if (const auto space = pattern.find_first_of(" \t"); space != std::string_view::npos) {
+        const auto name = upper(detail::sub(pattern, 0, space));
+        if (!std::ranges::contains(state_->shared->methods, name)) {
+            record(*state_, "'" + name + "' http method is not supported");
+            return;
+        }
+        methods = {.names = {name}};
+        path = detail::sub(pattern, space + 1);
+        while (!path.empty() && (path.front() == ' ' || path.front() == '\t')) {
+            path = detail::sub(path, 1);
+        }
+    }
+    if (path.empty() || !path.ends_with('/')) {
+        record(*state_, "subtree pattern must end in '/', got '" + std::string{path} + "'");
+        return;
+    }
+    const std::string tree_pattern = std::string{path} + "*";
+    if (!add_route(state_, {.methods = methods, .pattern = tree_pattern, .handler = std::move(handler)})) {
+        return;
+    }
+    if (path == "/") {
+        return;
+    }
+    const Registration redirect_route{
+        .methods = methods,
+        .pattern = detail::sub(path, 0, path.size() - 1),
+        .handler = [](Request& req, Response& res) -> asio::awaitable<Result> {
+            std::string location = std::string{req.raw_path()} + "/";
+            if (!req.raw_query().empty()) {
+                location += "?" + std::string{req.raw_query()};
+            }
+            co_return co_await redirect(req, res, location, Status::temporary_redirect);
+        },
+        .implicit = true};
+    // An existing route on the bare path takes precedence, so the redirect is simply not added.
+    const auto shape = detail::pattern_shape(detail::routing_pattern(redirect_route.pattern));
+    if (check_claim(*state_->shared, shape, redirect_route)) {
+        (void)add_route(state_, redirect_route);
+    }
 }
 
 void Router::method(std::string_view method, std::string_view pattern, Handler handler) {
@@ -603,7 +703,7 @@ std::vector<Route> Router::routes() const {
 std::vector<Middleware> Router::middlewares() const { return state_->middlewares; }
 
 std::optional<std::string> Router::find(std::string_view method, std::string_view path, RouteContext& context) const {
-    return find_in(*state_, context, method, path);
+    return find_in(*state_, context, method, detail::routing_path(path));
 }
 
 std::vector<Error> Router::errors() const {

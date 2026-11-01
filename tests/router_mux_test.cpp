@@ -96,7 +96,8 @@ TEST_CASE("chi TestMuxBasic") {
         co_return Result{};
     });
     m.post("/ping", text("", Status::created));
-    m.get("/ping/{id}", text("woop"));
+    // ki differs: chi first registers "/ping/{id}" with another handler and expects this one to replace it;
+    // ki rejects duplicates (see "chi duplicate registrations are rejected").
     m.get("/ping/{id}", [](Request& req, Response& res) -> asio::awaitable<Result> {
         co_return co_await res.write("ping one id: " + std::string{req.path_value("id")});
     });
@@ -863,7 +864,9 @@ TEST_CASE("chi TestMuxContextIsThreadSafe") {
 TEST_CASE("chi TestEscapedURLParams") {
     Router m;
     m.get("/api/{identifier}/{region}/{size}/{rotation}/*", [](Request& req, Response& res) -> asio::awaitable<Result> {
-        const bool ok = req.path_value("identifier") == "http:%2f%2fexample.com%2fimage.png" &&
+        // ki differs: chi passes the parameter still encoded; ki decodes each segment, as Go's ServeMux does,
+        // and %2F never splits a segment.
+        const bool ok = req.path_value("identifier") == "http://example.com/image.png" &&
                         req.path_value("region") == "full" && req.path_value("size") == "max" &&
                         req.path_value("rotation") == "0";
         co_return co_await res.write(ok ? "success" : "wrong params");

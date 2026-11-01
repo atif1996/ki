@@ -52,23 +52,20 @@ TEST_CASE("chi TestTree") {
     r.get("/article", named("hArticleList"));
     r.get("/article/", named("hArticleList"));
     r.get("/article/near", named("hArticleNear"));
-    r.get("/article/{id}", named("hStub"));
-    r.get("/article/{id}", named("hArticleShow"));
+    // ki differs: chi registers some of these routes twice and the later registration wins; ki rejects
+    // duplicates, so only the registration chi expects to take effect is kept (see "chi duplicate ...").
     r.get("/article/{id}", named("hArticleShow"));
     r.get("/article/@{user}", named("hArticleByUser"));
-    r.get("/article/{sup}/{opts}", named("hArticleShowOpts"));
     r.get("/article/{id}/{opts}", named("hArticleShowOpts"));
     r.get("/article/{iffd}/edit", named("hStub"));
     r.get("/article/{id}//related", named("hArticleShowRelated"));
     r.get("/article/slug/{month}/-/{day}/{year}", named("hArticleSlug"));
     r.get("/admin/user", named("hUserList"));
-    r.get("/admin/user/", named("hStub"));
     r.get("/admin/user/", named("hUserList"));
     r.get("/admin/user//{id}", named("hUserShow"));
     r.get("/admin/user/{id}", named("hUserShow"));
     r.get("/admin/apps/{id}", named("hAdminAppShow"));
     r.get("/admin/apps/{id}/*", named("hAdminAppShowCatchall"));
-    r.get("/admin/*", named("hStub"));
     r.get("/admin/*", named("hAdminCatchall"));
     r.get("/users/{userID}/profile", named("hUserProfile"));
     r.get("/users/super/*", named("hUserSuper"));
@@ -121,7 +118,7 @@ TEST_CASE("chi TestTreeMoar") {
     r.get("/articles/search", named("hStub1"));
     r.get("/articles/{id}:delete", named("hStub8"));
     r.get("/articles/{iidd}!sup", named("hStub4"));
-    r.get("/articles/{id}:{op}", named("hStub3"));
+    // ki differs: chi registers this and "/pages/*" twice, the later winning; see "chi duplicate ...".
     r.get("/articles/{id}:{op}", named("hStub2"));
     r.get("/articles/{slug:^[a-z]+}/posts", named("hStub"));
     r.get("/articles/{id}/posts/{pid}", named("hStub6"));
@@ -130,7 +127,6 @@ TEST_CASE("chi TestTreeMoar") {
     r.get("/articles/{id}/data.json", named("hStub11"));
     r.get("/articles/files/{file}.{ext}", named("hStub12"));
     r.put("/articles/me", named("hStub13"));
-    r.get("/pages/*", named("hStub"));
     r.get("/pages/*", named("hStub9"));
     r.get("/users/{id}", named("hStub14"));
     r.get("/users/{id}/settings/{key}", named("hStub15"));
@@ -249,5 +245,32 @@ TEST_CASE("invalid patterns are rejected and leave the router unchanged") {
         REQUIRE(r.errors().size() == 1);
         REQUIRE(r.routes().size() == 1);
         REQUIRE(serve(r, "GET", "/ok").name == "ok");
+    }
+}
+
+// chi: TestTree, TestTreeMoar, TestMuxBasic register these routes twice and expect the later registration to
+// win. ki differs, as Go's ServeMux does: a duplicate is rejected, recorded with both patterns, and the first
+// registration keeps serving.
+TEST_CASE("chi duplicate registrations are rejected") {
+    struct Pair {
+        const char* first;
+        const char* second;
+        const char* path;
+    };
+    for (const auto& c : {Pair{"/article/{id}", "/article/{id}", "/article/1"},
+                          Pair{"/article/{sup}/{opts}", "/article/{id}/{opts}", "/article/1/2"},
+                          Pair{"/admin/user/", "/admin/user/", "/admin/user/"},
+                          Pair{"/admin/*", "/admin/*", "/admin/x"},
+                          Pair{"/articles/{id}:{op}", "/articles/{id}:{op}", "/articles/1:sync"},
+                          Pair{"/ping/{id}", "/ping/{iidd}", "/ping/7"}}) {
+        INFO(c.second);
+        ki::Router r;
+        r.get(c.first, named("first"));
+        r.get(c.second, named("second"));
+        const auto errors = r.errors();
+        REQUIRE(errors.size() == 1);
+        REQUIRE(errors[0].message.find(c.first) != std::string::npos);
+        REQUIRE(errors[0].message.find(c.second) != std::string::npos);
+        REQUIRE(serve(r, "GET", c.path).name == "first");
     }
 }

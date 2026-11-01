@@ -55,6 +55,14 @@ std::expected<Segment, Error> next_segment(std::string_view pattern) {
         const auto key = sub(pattern, brace + 1, close - brace - 1);
         const auto colon = key.find(':');
         segment.key = sub(key, 0, colon);
+        if (colon == std::string_view::npos && key.ends_with("...")) {
+            if (segment.end != pattern.size()) {
+                return invalid("{...} wildcard not at end");
+            }
+            segment.type = NodeType::catch_all;
+            segment.key = sub(key, 0, key.size() - 3);
+            return segment;
+        }
         if (colon != std::string_view::npos) {
             segment.type = NodeType::regexp;
             segment.regex = std::string{sub(key, colon + 1)};
@@ -88,15 +96,52 @@ std::shared_ptr<const re2::RE2> compile(const std::string& regex) {
     return compiled->ok() ? compiled : nullptr;
 }
 
-std::vector<std::string> param_keys(std::string_view pattern) {
-    std::vector<std::string> keys{};
-    for (;;) {
-        const auto segment = segment_of(pattern);
-        if (segment.type == NodeType::static_text) {
-            return keys;
+// valid_param_name follows Go's wildcard names: a letter or '_' followed by letters, digits and '_'.
+bool valid_param_name(std::string_view name) noexcept {
+    const auto letter = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; };
+    return !name.empty() && letter(name.front()) &&
+           std::ranges::all_of(name, [&](char c) { return letter(c) || (c >= '0' && c <= '9'); });
+}
+
+int hex_digit(char c) noexcept {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
+// append_routing_char writes a decoded character, re-escaping the ones that structure a route.
+void append_routing_char(std::string& out, char c) {
+    switch (c) {
+        case '%': out += "%25"; break;
+        case '/': out += "%2F"; break;
+        case '{': out += "%7B"; break;
+        case '}': out += "%7D"; break;
+        case '*': out += "%2A"; break;
+        default: out.push_back(c);
+    }
+}
+
+// append_routing_text converts literal path text: raw '/' stays a separator, valid escapes are decoded,
+// and everything else is written in routing form.
+void append_routing_text(std::string& out, std::string_view text) {
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '/') {
+            out.push_back('/');
+        } else if (c == '%' && i + 2 < text.size() && hex_digit(text[i + 1]) >= 0 && hex_digit(text[i + 2]) >= 0) {
+            append_routing_char(out, static_cast<char>((static_cast<unsigned>(hex_digit(text[i + 1])) << 4U) |
+                                                       static_cast<unsigned>(hex_digit(text[i + 2]))));
+            i += 2;
+        } else {
+            append_routing_char(out, c);
         }
-        keys.emplace_back(segment.key);
-        pattern = sub(pattern, segment.end);
     }
 }
 
@@ -161,14 +206,12 @@ std::optional<std::reference_wrapper<Node>> get_edge(Node& node, NodeType type, 
     return std::nullopt;
 }
 
-void set_endpoint(Node& node, const Methods& methods, std::string_view pattern, const Endpoint& endpoint) {
+void set_endpoint(Node& node, const Methods& methods, const Endpoint& endpoint) {
     if (!node.endpoints) {
         node.endpoints.emplace();
     }
     auto& endpoints = *node.endpoints;
-    Endpoint value = endpoint;
-    value.pattern = std::string{pattern};
-    value.param_keys = param_keys(pattern);
+    const Endpoint& value = endpoint;
     if (methods.stub) {
         auto& stub = endpoints[std::string{stub_method}];
         stub.handler = endpoint.handler;
@@ -293,7 +336,9 @@ NodeRef find_route(const Node& node, std::string_view method, std::string_view s
                     }
                     const auto value = sub(rest, 0, end);
                     if (type == NodeType::regexp && child->regex) {
-                        if (!re2::RE2::PartialMatch(value, *child->regex)) {
+                        const bool escaped = value.find('%') != std::string_view::npos;
+                        if (!re2::RE2::PartialMatch(escaped ? std::string_view{decode_value(value)} : value,
+                                                    *child->regex)) {
                             continue;
                         }
                     } else if (value.find('/') != std::string_view::npos) {
@@ -373,26 +418,118 @@ bool find_pattern_in(const Node& node, std::string_view pattern) {
 
 }  // namespace
 
-Result Tree::validate(std::string_view pattern) {
-    std::vector<std::string_view> keys{};
+std::string routing_path(std::string_view raw_path) {
+    std::string out;
+    out.reserve(raw_path.size());
+    append_routing_text(out, raw_path);
+    return out;
+}
+
+std::string routing_pattern(std::string_view pattern) {
+    std::string out;
+    out.reserve(pattern.size());
+    std::size_t literal = 0;
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        if (pattern[i] == '*') {
+            append_routing_text(out, sub(pattern, literal, i - literal));
+            out.push_back('*');
+            literal = i + 1;
+        } else if (pattern[i] == '{') {
+            append_routing_text(out, sub(pattern, literal, i - literal));
+            int depth = 0;
+            std::size_t close = i;
+            for (std::size_t j = i; j < pattern.size(); ++j) {
+                if (pattern[j] == '{') {
+                    ++depth;
+                } else if (pattern[j] == '}' && --depth == 0) {
+                    close = j;
+                    break;
+                }
+            }
+            const auto param = sub(pattern, i, close - i + 1);
+            if (param.ends_with("...}") && param.find(':') == std::string_view::npos) {
+                out.push_back('*');
+            } else {
+                out.append(param);
+            }
+            i = close;
+            literal = close + 1;
+        }
+    }
+    append_routing_text(out, sub(pattern, literal));
+    return out;
+}
+
+std::string pattern_shape(std::string_view routing_pattern) {
+    std::string out;
+    for (std::size_t i = 0; i < routing_pattern.size(); ++i) {
+        if (routing_pattern[i] != '{') {
+            out.push_back(routing_pattern[i]);
+            continue;
+        }
+        int depth = 0;
+        std::size_t close = i;
+        for (std::size_t j = i; j < routing_pattern.size(); ++j) {
+            if (routing_pattern[j] == '{') {
+                ++depth;
+            } else if (routing_pattern[j] == '}' && --depth == 0) {
+                close = j;
+                break;
+            }
+        }
+        const auto param = sub(routing_pattern, i + 1, close - i - 1);
+        const auto colon = param.find(':');
+        out += colon == std::string_view::npos ? std::string{"{}"} : "{" + std::string{sub(param, colon)} + "}";
+        i = close;
+    }
+    return out;
+}
+
+std::string decode_value(std::string_view value) {
+    std::string out;
+    out.reserve(value.size());
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        if (value[i] == '%' && i + 2 < value.size() && hex_digit(value[i + 1]) >= 0 && hex_digit(value[i + 2]) >= 0) {
+            out.push_back(static_cast<char>((static_cast<unsigned>(hex_digit(value[i + 1])) << 4U) |
+                                            static_cast<unsigned>(hex_digit(value[i + 2]))));
+            i += 2;
+        } else {
+            out.push_back(value[i]);
+        }
+    }
+    return out;
+}
+
+std::expected<std::vector<std::string>, Error> Tree::parse(std::string_view pattern) {
+    std::vector<std::string> keys;
+    std::size_t offset = 0;
     std::string_view rest = pattern;
+    const auto fail = [&](std::string_view reason) {
+        return std::unexpected(Error{.status = Status::internal_server_error,
+                                     .message = "invalid pattern '" + std::string{pattern} + "' at offset " +
+                                                std::to_string(offset) + ": " + std::string{reason}});
+    };
     for (;;) {
         auto segment = next_segment(rest);
         if (!segment) {
-            return std::unexpected(Error{.message = segment.error().message + " in '" + std::string{pattern} + "'"});
+            offset += std::min(rest.find_first_of("{*"), rest.size());
+            return fail(segment.error().message);
         }
         if (segment->type == NodeType::static_text) {
-            return {};
+            return keys;
+        }
+        offset += segment->start;
+        if (segment->key != "*" && !valid_param_name(segment->key)) {
+            return fail(segment->key.empty() ? "empty wildcard" : "bad wildcard name");
         }
         if (segment->type == NodeType::regexp && !compile(segment->regex)) {
-            return invalid("invalid regexp pattern '" + segment->regex + "' in route param in '" + std::string{pattern} +
-                           "'");
+            return fail("invalid regexp '" + segment->regex + "'");
         }
         if (std::ranges::contains(keys, segment->key)) {
-            return invalid("routing pattern '" + std::string{pattern} + "' contains duplicate param key, '" +
-                           std::string{segment->key} + "'");
+            return fail("duplicate param key '" + std::string{segment->key} + "'");
         }
-        keys.push_back(segment->key);
+        keys.emplace_back(segment->key);
+        offset += segment->end - segment->start;
         rest = sub(rest, segment->end);
     }
 }
@@ -403,7 +540,7 @@ Node& Tree::insert(const Methods& methods, std::string_view pattern, const Endpo
 
     for (;;) {
         if (search.empty()) {
-            set_endpoint(node, methods, pattern, endpoint);
+            set_endpoint(node, methods, endpoint);
             return node;
         }
 
@@ -423,7 +560,7 @@ Node& Tree::insert(const Methods& methods, std::string_view pattern, const Endpo
             child->tail = segment.tail;
             child->prefix = std::string{search};
             Node& leaf = add_child(parent, std::move(child), search);
-            set_endpoint(leaf, methods, pattern, endpoint);
+            set_endpoint(leaf, methods, endpoint);
             return leaf;
         }
         node = *edge;
@@ -451,14 +588,14 @@ Node& Tree::insert(const Methods& methods, std::string_view pattern, const Endpo
 
         search = sub(search, common);
         if (search.empty()) {
-            set_endpoint(split_node, methods, pattern, endpoint);
+            set_endpoint(split_node, methods, endpoint);
             return split_node;
         }
         auto rest = std::make_unique<Node>();
         rest->label = search.front();
         rest->prefix = std::string{search};
         Node& leaf = add_child(split_node, std::move(rest), search);
-        set_endpoint(leaf, methods, pattern, endpoint);
+        set_endpoint(leaf, methods, endpoint);
         return leaf;
     }
 }
