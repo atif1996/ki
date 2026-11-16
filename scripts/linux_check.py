@@ -23,7 +23,7 @@ COMPILERS = {
 STEPS = """
 set -euo pipefail
 mkdir -p /work
-tar -C /src --exclude=./build --exclude=./test_package/build -cf - . | tar -C /work -xf -
+tar -C /src --exclude=./build --exclude=./tests/consumer/build -cf - . | tar -C /work -xf -
 cd /work
 conan profile detect --force > /dev/null
 printf '[conf]\\ntools.build:compiler_executables={{"c": "{cc}", "cpp": "{cxx}"}}\\n' \\
@@ -37,7 +37,7 @@ core.download:retry=10
 core.download:retry_wait=3
 CONF
 echo "::: {name}: shared build and tests"
-conan build . -s compiler.cppstd=23 -o "&:shared=True" -c user.ki:werror=True --build=missing
+conan build . -s compiler.cppstd=23 -o "&:shared=True" -c user.project:werror=True --build=missing
 echo "::: {name}: conan create (static)"
 conan create . -s compiler.cppstd=23 -o "ki/*:shared=False" --build=missing
 echo "::: {name}: conan create (shared)"

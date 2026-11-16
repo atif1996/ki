@@ -44,9 +44,10 @@ POLICY_RULES = {
 def check_policy(_args):
     """Fail if library headers or sources throw or call substr."""
     offenders = []
-    for directory in ("include", "src"):
+    for directory in ("ki",):
         for path in sorted((ROOT / directory).rglob("*")):
-            if path.suffix not in {".hpp", ".cpp", ".h", ".ipp"}:
+            # Tests sit next to the code; the rules are for the library, not for its tests.
+            if path.suffix not in {".hpp", ".cpp", ".h", ".ipp"} or path.name.endswith(".test.cpp"):
                 continue
             code = strip_comments_and_strings(path.read_text(encoding="utf-8"))
             for lineno, line in enumerate(code.splitlines(), start=1):
@@ -56,7 +57,7 @@ def check_policy(_args):
     if offenders:
         print("not allowed in ki's library code:", *offenders, sep="\n  ")
         return 1
-    print("policy: no throw or substr in include/ or src/")
+    print("policy: no throw or substr in the library code under ki/")
     return 0
 
 
@@ -124,10 +125,10 @@ def check_consumers(args):
          f"-DCMAKE_PREFIX_PATH={deps}", f"-DCMAKE_INSTALL_PREFIX={prefix}"])
     run(["cmake", "--build", work / "ki", *build])
     run(["cmake", "--install", work / "ki", *build])
-    run(["cmake", "-S", ROOT / "test_package", "-B", work / "consumer", *common,
+    run(["cmake", "-S", ROOT / "tests" / "consumer", "-B", work / "consumer", *common,
          f"-DCMAKE_PREFIX_PATH={prefix};{deps}"])
     run(["cmake", "--build", work / "consumer", *build])
-    run_consumer(find_executable(work / "consumer", "test_package"), version, extra_path=prefix / "bin")
+    run_consumer(find_executable(work / "consumer", "consumer"), version, extra_path=prefix / "bin")
 
     # T0.12: the installed package configuration references no forbidden dependency.
     config_dir = next(prefix.rglob("ki-config.cmake")).parent
@@ -136,7 +137,7 @@ def check_consumers(args):
             raise RuntimeError(f"{config} references a forbidden dependency")
 
     # T0.7: add_subdirectory consumer; ki must not build its tests there.
-    run(["cmake", "-S", ROOT / "tests" / "subproject", "-B", work / "subproject", *common,
+    run(["cmake", "-S", ROOT / "tests" / "consumer" / "subproject", "-B", work / "subproject", *common,
          f"-DKI_SOURCE_DIR={ROOT}", f"-DCMAKE_PREFIX_PATH={deps}"])
     run(["cmake", "--build", work / "subproject", *build])
     run_consumer(find_executable(work / "subproject", "subproject_check"), version)

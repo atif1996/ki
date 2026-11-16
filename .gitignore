@@ -1,7 +1,7 @@
 /build/
 /out/
-/test_package/build/
-/test_package/CMakeUserPresets.json
+/tests/consumer/build/
+/tests/consumer/CMakeUserPresets.json
 /CMakeUserPresets.json
 /vcpkg_installed/
 /.cache/

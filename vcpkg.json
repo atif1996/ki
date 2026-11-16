@@ -7,14 +7,14 @@
   "builtin-baseline": "d186940b2f0c4e8e5b4ff804af57d2a26fbfa091",
   "dependencies": [
     "asio",
-    "llhttp",
     "re2"
   ],
   "features": {
     "tests": {
       "description": "Build the ki test suite",
       "dependencies": [
-        "catch2"
+        "catch2",
+        "llhttp"
       ]
     }
   }

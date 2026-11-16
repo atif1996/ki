@@ -3,9 +3,9 @@
 A chi-style router and Go `net/http`-style HTTP server for C++23 coroutines, built on standalone Asio
 and llhttp.
 
-ki is in Phase 1: core request and response types and the test recorder; there is no router or server
-yet. See [docs/PLAN.md](docs/PLAN.md) for the design, the phases and the tests that define when each
-phase is done.
+ki has its core request and response types, structured logging, and a chi-compatible router; there is no
+server or middleware yet. See [docs/PLAN.md](docs/PLAN.md) for the design, the phases and the tests that
+define when each phase is done.
 
 ## Passing values through a request
 
@@ -66,7 +66,7 @@ auto out = ki::test::Recorder::run(authenticate(greet), request);
 // out.status == ki::Status::ok, out.body == "hello ada"
 ```
 
-These examples are compiled and run as part of the test suite (`tests/readme_test.cpp`).
+These examples are compiled and run as part of the test suite (`tests/integration/readme.test.cpp`).
 
 ## Requirements
 
@@ -84,7 +84,7 @@ conan build . -s compiler.cppstd=23 -o "&:shared=True" --build=missing
 
 `conan build` configures, builds and runs the test suite. Development builds are shared to prove the
 library's exports and transitive linking; consumers get a static library by default. Add
-`-c user.ki:werror=True` to treat warnings as errors, as CI does.
+`-c user.project:werror=True` to treat warnings as errors, as CI does.
 
 To work with CMake directly after `conan install`, use the presets Conan generates:
 
@@ -108,10 +108,32 @@ ctest --preset vcpkg-release
 
 ```cmake
 find_package(ki CONFIG REQUIRED)
-target_link_libraries(app PRIVATE ki::ki)
+target_link_libraries(app PRIVATE ki::ki ki::log)     # the HTTP types and router; structured logging
+target_link_libraries(app_tests PRIVATE ki::test)     # the Recorder, for tests only
 ```
 
 ki requires C++23 and passes that requirement to every target that links it.
+
+## Layout
+
+ki follows the [moderncpp template](https://github.com/atif1996/moderncpp): headers and sources sit together
+in a directory named after the package, and there is no `include/` or `src/` split. Installing puts the
+public headers under `<prefix>/include/ki/`.
+
+| Directory | Library | Include as |
+|---|---|---|
+| `ki/` | `ki::ki`: the HTTP types and the router | `<ki/router.hpp>`, or `<ki/ki.hpp>` for everything |
+| `ki/log/` | `ki::log`: structured logging | `<ki/log/log.hpp>` |
+| `ki/test/` | `ki::test`: the Recorder for testing handlers | `<ki/test/recorder.hpp>` |
+
+- Unit tests sit next to the code they test, as `*.test.cpp`.
+- `tests/conformance` holds the ported chi and Go router suites, and `tests/integration` the tests that use
+  several libraries together.
+- `tests/consumer` is a separate project built against the installed package; `conan create` runs it.
+- `ki/detail/` holds private headers and sources, which are not installed.
+
+For release builds, `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON` lets the linker inline across source files
+and across ki's static libraries.
 
 ## Linux builds on a Mac
 
@@ -126,7 +148,7 @@ python3 scripts/linux_check.py --compiler gcc-14
 ## Repository checks
 
 ```sh
-python3 scripts/ci_checks.py policy       # no throw in library code
+python3 scripts/ci_checks.py policy       # no throw or substr in library code
 python3 scripts/ci_checks.py versions     # CMakeLists.txt, vcpkg.json and the Conan recipe agree
 python3 scripts/ci_checks.py deps         # no forbidden dependencies
 python3 scripts/ci_checks.py consumers --deps build/Release/generators --shared

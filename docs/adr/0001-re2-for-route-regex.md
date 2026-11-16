@@ -28,7 +28,7 @@ The requirements come from ki's principles and from where the patterns run:
 Use [RE2](https://github.com/google/re2) (version 2025-11-05, BSD-3-Clause) for regex route
 parameters. Never use `std::regex`.
 
-RE2 is a private dependency of the ki library: its headers appear only in `src/`, never in ki's
+RE2 is a private dependency of the ki library: its headers appear only in ki's `.cpp` files, never in ki's
 public headers. Patterns are compiled once, when the route is registered, with error logging turned
 off; a pattern that fails to compile makes the registration fail with an error. Matching uses the
 compiled `re2::RE2` with the anchors chi adds (`^...$`), so a parameter must match the regex as a

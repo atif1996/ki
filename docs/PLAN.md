@@ -28,10 +28,10 @@ Non-goals for the core library:
 
 | Principle | Rule | Enforcement |
 |---|---|---|
-| No throw for expected errors | Expected failures return `std::expected<T, ki::Error>` or `std::error_code`. Asio calls use non-throwing completion tokens by default. | CI gate: no `throw` in `include/` or `src/`. clang-tidy `bugprone-exception-escape` on `noexcept` functions. |
+| No throw for expected errors | Expected failures return `std::expected<T, ki::Error>` or `std::error_code`. Asio calls use non-throwing completion tokens by default. | CI gate: no `throw` in the library code under `ki/` (tests excluded). clang-tidy `bugprone-exception-escape` on `noexcept` functions. |
 | Exception safety | The library is exception-neutral toward user code. Router setup has the strong guarantee. RAII for every resource. A last-resort catch in each connection coroutine keeps one throwing handler from taking down the server. | Phase 1 and Phase 5 tests that throw from handlers. |
 | C++23 only | `target_compile_features(ki PUBLIC cxx_std_23)`. No C++20 fallbacks. | T0.8. |
-| No bare pointers | Ownership via `std::unique_ptr` / `std::shared_ptr`. Non-owning access via references, `std::span`, `std::string_view`. C APIs that need `void*` (llhttp, later libpq / OpenSSL / nghttp2) are wrapped in RAII types under `src/detail/` and nowhere else. | clang-tidy `cppcoreguidelines-owning-memory`, `-no-malloc`, `-pro-bounds-*`, `-pro-type-reinterpret-cast`; `src/detail/` exemptions carry a `NOLINT` with a reason. |
+| No bare pointers | Ownership via `std::unique_ptr` / `std::shared_ptr`. Non-owning access via references, `std::span`, `std::string_view`. C APIs that need `void*` (llhttp, later libpq / OpenSSL / nghttp2) are wrapped in RAII types under `ki/detail/` and nowhere else. | clang-tidy `cppcoreguidelines-owning-memory`, `-no-malloc`, `-pro-bounds-*`, `-pro-type-reinterpret-cast`; `ki/detail/` exemptions carry a `NOLINT` with a reason. |
 | Memory safety | No raw buffer arithmetic outside the parser wrapper. | ASan + UBSan and TSan jobs, hardened standard library, fuzzing (Phase 6). |
 | Injection prevention | CR/LF and invalid token characters rejected in header names and values. llhttp strict mode, no lenient flags. Size limits on headers, header count and body. Control characters escaped in log output. HTML escaping is the default in templates. | Phase 6 security tests. |
 | Prepared statements only | Applies wherever SQL appears (today: only `bench/sql/`). SQL text is a `consteval`-constructed literal; values are bound as typed parameters. | Compile-fail test T8.4. |
@@ -45,7 +45,7 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Area | Decision |
 |---|---|
 | I/O | Standalone Asio 1.38.2, C++20 coroutines, one `io_context` per core. |
-| HTTP/1.1 parsing | llhttp (handles pipelined input). Not Boost.Beast. |
+| HTTP/1.1 parsing | llhttp (handles pipelined input). Not Boost.Beast. Until the server arrives no library links it; a test keeps it proven on every platform. |
 | Copying | Minimal copying: pass `std::string_view`, move rather than copy, avoid copies that serve no purpose. There is no zero-copy goal: where avoiding a copy would make an API harder to use or open the door to dangling views, ki copies. Performance work is driven by the Phase 7 benchmarks, not done speculatively. |
 | JSON / BSON | Glaze, optional (`ki::json`), behind a Conan option and vcpkg feature. Exception-free; also covers BSON, CBOR, MessagePack. Pin the same version in both package managers (Conan Center has 8.4.0, vcpkg has 9.0.0 — use a vcpkg `overrides` entry). |
 | Pattern grammar | chi's grammar is the base, so chi route tables port: `{name}`, params sharing a segment with literals (`{id}.json`, `{file}.{ext}`, `{id}-{aux}`), regex constraints (`{id:[0-9]+}`), trailing `*`, and an optional method prefix (`"GET /path"`). Go's `{name...}` is a named catch-all. Parameter names follow Go's rules, and pattern errors report Go's offsets. Go's `{$}` is not supported: ki routes are exact by default, so it has nothing to disable. Host matching lives in a separate `HostRouter`, not in the pattern. |
@@ -58,13 +58,14 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Router lifetime | Routes are registered before serving; the router is frozen when the server starts and later registration returns an error. Matching is lock-free. |
 | Build | CMake ≥ 3.25, presets, Ninja, target-based, `FILE_SET HEADERS`, installed `ki-config.cmake`. No C++ modules yet. |
 | Packaging | Conan 2 primary (verified locally), vcpkg manifest secondary (verified in CI). CMake uses only `find_package`. |
-| Linkage | Dev presets and CI build **shared** to prove exports and transitive linking; CI also builds static. Consumers default to **static**. Internal unit tests link a non-installed static `ki_internal` target because the shared library hides internal symbols. |
+| Linkage | Dev builds and CI build **shared** to prove exports and transitive linking; CI also builds static. Consumers default to **static**. Unit tests link the same shared libraries as everything else, so they exercise the exports too; a library's private headers are visible to its own tests because the source root is the build-tree include directory. |
 | Request and Response | Concrete classes, not interfaces. The transport (HTTP/1.1 connection, test recorder, later HTTP/2) sits behind `ki::detail::ResponseTransport` / `BodySource`. Response always tracks status, bytes written and state, so middleware never wraps it. |
 | Handler type | `std::function<asio::awaitable<Result>(Request&, Response&)>`. `std::move_only_function` was planned but libc++ does not ship it yet; handlers needing move-only state hold it through `std::shared_ptr`. Revisit when libc++ ships it. |
 | Request values | `ki::ContextKey<T>` identified by name (works across shared libraries, may be declared `inline` in a header), with a compile-time type fingerprint so a name reused with another type reads as absent. Accessed through `req.set` / `get` / `value_or` / `with`. |
 | Cancellation | Every root coroutine ki spawns disables Asio's `throw_if_cancelled`, which otherwise makes each `co_await` after a cancellation throw. Cancellation reaches handlers only as `operation_aborted` error codes. |
+| C++ modules | Headers are the interface. Where the compiler can build a module that exports an Asio coroutine (checked at configure time), each library also offers a module that re-exports its header API (`import ki;`); elsewhere the build falls back to headers alone. In November 2026 that check passes on Clang 23 and fails on Apple Clang 21, GCC 14 and GCC 16.2. |
 | Version source | `project(ki VERSION …)` in `CMakeLists.txt`. The Conan recipe reads it; `vcpkg.json` duplicates it and T0.9 catches drift. |
-| Tests | Catch2 v3. chi's test cases ported as the conformance suite; each ported case carries a `// chi: TestName` provenance comment. Where chi panics, ki returns an error and the ported test asserts on it. |
+| Tests | Catch2 v3. Unit tests sit next to the code as `*.test.cpp`; `tests/conformance` holds the ported suites and `tests/integration` the cross-library tests. chi's test cases ported as the conformance suite; each ported case carries a `// chi: TestName` provenance comment. Where chi panics, ki returns an error and the ported test asserts on it. |
 | First middleware | RequestID, ClientIP (trusted-proxy, rightmost-untrusted — chi's replacement for the deprecated RealIP), Logger, Metrics (RED), Recoverer, Timeout, Heartbeat, StripSlashes, CleanPath, GetHead. |
 | Logging | `ki::log`, modelled on Go's `log/slog`: a `Sink` interface receiving structured records, a `Logger` value type with `with(attrs...)`, built-in `null` / `text` / `json` sinks, asynchronous by default. No logging-library dependency in core. Adapters for Quill or spdlog are optional extras, later. |
 | Observability hooks | Core `ki` exposes an observer interface (connection accepted/closed with reason, request started/finished, request rejected with reason). Logging and metrics build on it; core has no metrics dependency. |
@@ -74,31 +75,39 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 
 ## Layout
 
+ki follows the layout of the [moderncpp template](https://github.com/atif1996/moderncpp): headers and sources
+together in a directory named after the package, unit tests next to the code, and no `include/` or `src/`
+split. Installing puts the public headers under `<prefix>/include/ki/`.
+
 ```
-ki/
-├── CMakeLists.txt
-├── CMakePresets.json         # dev-shared (default), dev-static, asan, tsan, vcpkg-*
-├── cmake/                    # ki-config.cmake.in, version.hpp.in
-├── include/ki/               # public headers only
-├── src/                      # implementation; src/detail/ holds the C-API wrappers
+ki/                               # repository root
+├── CMakeLists.txt  CMakePresets.json  conanfile.py  vcpkg.json
+├── cmake/                        # AddLibrary.cmake (ki_add_library), Warnings.cmake, config and version templates
+├── ki/                           # the main library, ki::ki: HTTP types and the router; <ki/router.hpp>
+│   ├── *.hpp  *.cpp              # public headers and their sources, side by side
+│   ├── *.test.cpp                # unit tests, next to the code they test
+│   ├── detail/                   # private headers and sources; not installed
+│   ├── log/                      # ki::log, structured logging; <ki/log/log.hpp>
+│   └── test/                     # ki::test, the Recorder for testing handlers; <ki/test/recorder.hpp>
 ├── tests/
-│   ├── unit/                 # links ki_internal (static)
-│   ├── conformance/          # ported chi + net/http behaviour; links ki (shared in dev)
-│   ├── security/
-│   ├── compile_fail/         # try_compile checks that must fail
-│   └── fuzz/                 # libFuzzer targets + seed corpora
-├── test_package/             # consumer project: Conan test_package and plain find_package check
-├── bench/                    # KI_BUILD_BENCH=OFF by default; never installed
-│   ├── go-reference/         # net/http + chi with identical routes/middleware
-│   ├── smallnest/            # entry for the go-web-framework-benchmark fork
-│   ├── techempower/
-│   └── sql/                  # private libpq layer (ki_bench_sql), not exported
-├── conanfile.py
-├── vcpkg.json
-├── .clang-tidy
-├── .github/workflows/ci.yml
-└── docs/PLAN.md
+│   ├── conformance/              # the ported chi and Go router suites
+│   ├── integration/              # several libraries together through their public headers
+│   ├── consumer/                 # separate project built against the installed package; the Conan package test
+│   ├── support/                  # helpers shared by the tests above
+│   ├── security/  compile_fail/  fuzz/        # later phases
+├── bench/                        # KI_BUILD_BENCH=OFF by default; never installed (Phase 7)
+├── ci/linux/                     # container for scripts/linux_check.py
+├── scripts/                      # ci_checks.py, linux_check.py
+├── .github/workflows/build-test.yaml
+└── docs/                         # PLAN.md, adr/
 ```
+
+A sub-directory of `ki/` with its own `CMakeLists.txt` is a separate library, and each directory matches a
+namespace: `ki::` in `ki/`, `ki::log` in `ki/log/`, `ki::test` in `ki/test/`. Libraries are split by how an
+application uses them, not by their dependencies: the main library is everything needed to build a server
+(the router included, since a server is rarely built without it), logging is usable anywhere, and the test
+helpers are linked only by tests. Later libraries follow the same rule: `ki/middleware/` and the server join
+the main library; `ki/auth/`, `ki/jwt/`, `ki/json/` and `ki/metrics/` are opt-in libraries of their own.
 
 ## Phases
 
@@ -108,16 +117,16 @@ verified by CI once a remote exists.
 
 ### Phase 0 — build and packaging
 
-Deliverables: CMake target and install/export, presets, Conan recipe and `test_package`,
+Deliverables: CMake target and install/export, presets, Conan recipe and its package test (`tests/consumer`),
 `vcpkg.json`, `.clang-tidy`, CI workflow, toolchain smoke tests.
 
 | ID | Test | Passes when | Where |
 |---|---|---|---|
 | T0.1 | Dev build: `conan install . -s compiler.cppstd=23 --build=missing -o "ki/*:shared=True"`, `cmake --preset conan-debug`, build, `ctest` (Debug and Release) | Builds warning-free, all tests pass | Local, L M W |
 | T0.2 | Toolchain smoke tests | (a) `std::expected` usable; (b) an Asio coroutine awaits a timer with `as_tuple` and receives an error code, no exception; (c) llhttp parses two pipelined requests from one buffer and reports 2 completed messages | Local, L M W |
-| T0.3 | `conan create . -s compiler.cppstd=23 --build=missing` | Package builds, its tests run, `test_package` links `ki::ki` and prints a version equal to `KI_VERSION_STRING` | Local, L M W |
+| T0.3 | `conan create . -s compiler.cppstd=23 --build=missing` | Package builds, its tests run, `tests/consumer` links `ki::ki` and prints a version equal to `KI_VERSION_STRING` | Local, L M W |
 | T0.4 | T0.3 with `-o "ki/*:shared=True"` | Consumer calls `ki::version()` from the shared library (on Windows: through the DLL export) | Local, L M W |
-| T0.5 | `cmake --install` to a temporary prefix, then build `test_package` with only `CMAKE_PREFIX_PATH` | `find_package(ki)` resolves asio and llhttp transitively; consumer builds and runs | Local, L |
+| T0.5 | `cmake --install` to a temporary prefix, then build `tests/consumer` with only `CMAKE_PREFIX_PATH` | `find_package(ki)` resolves asio and RE2 transitively; consumer builds and runs | Local, L |
 | T0.6 | vcpkg: `cmake --preset vcpkg-release`, build, `ctest` | Dependencies resolve from the pinned baseline; tests pass | L |
 | T0.7 | Subproject: a consumer uses `add_subdirectory(ki)` | `ki::ki` works; ki's tests are not built | Local |
 | T0.8 | C++ standard enforcement | (a) A consumer with no `CMAKE_CXX_STANDARD` compiles as C++23; (b) `conan create` with `cppstd=20` stops in `validate()` with a "requires C++23" message | Local |

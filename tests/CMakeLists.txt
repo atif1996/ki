@@ -1,46 +1,34 @@
-find_package(Catch2 3 CONFIG REQUIRED)
-include(Catch)
+# Tests that are not tied to one source file. Unit tests live next to the code they test, as <name>.test.cpp.
+# tests/consumer is a separate project, built against an installed package.
 
-# Always shared: T1.5 needs a library boundary between where a context value is set and where it is read.
-add_library(ki-context-probe SHARED context_probe/probe.cpp)
-generate_export_header(ki-context-probe BASE_NAME ki_probe
+# conformance: chi's and Go's router test suites, ported.
+add_executable(ki_conformance_tests
+  conformance/chi_mux.test.cpp
+  conformance/chi_tree.test.cpp
+  conformance/go_servemux.test.cpp)
+target_include_directories(ki_conformance_tests PRIVATE support)
+target_link_libraries(ki_conformance_tests PRIVATE ki::ki ki::test Catch2::Catch2WithMain)
+ki_target_warnings(ki_conformance_tests)
+catch_discover_tests(ki_conformance_tests DISCOVERY_MODE PRE_TEST)
+
+# Always shared: the context test needs a library boundary between where a value is set and where it is read.
+add_library(ki_context_probe SHARED integration/shared_library_context/probe.cpp)
+generate_export_header(ki_context_probe BASE_NAME ki_probe
   EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/ki_probe_export.hpp")
-target_include_directories(ki-context-probe PUBLIC context_probe "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(ki-context-probe PUBLIC ki::ki)
-set_target_properties(ki-context-probe PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-ki_target_warnings(ki-context-probe)
+target_include_directories(ki_context_probe PUBLIC integration/shared_library_context "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(ki_context_probe PUBLIC ki::ki)
+set_target_properties(ki_context_probe PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+ki_target_warnings(ki_context_probe)
 
-add_executable(ki-tests
-  context_test.cpp
-  form_test.cpp
-  headers_test.cpp
-  log_test.cpp
-  query_test.cpp
-  readme_test.cpp
-  response_test.cpp
-  router_api_test.cpp
-  router_go_test.cpp
-  router_mux_test.cpp
-  router_tree_test.cpp
-  strings_test.cpp
-  toolchain_test.cpp
-  url_test.cpp
-  version_test.cpp)
-target_link_libraries(ki-tests PRIVATE ki::ki ki-context-probe llhttp::llhttp Catch2::Catch2WithMain)
-target_include_directories(ki-tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
-ki_target_warnings(ki-tests)
-catch_discover_tests(ki-tests DISCOVERY_MODE PRE_TEST)
-
-# T0.11: every public header compiles alone in its own translation unit.
-file(GLOB_RECURSE ki_public_headers RELATIVE "${PROJECT_SOURCE_DIR}/include" CONFIGURE_DEPENDS
-  "${PROJECT_SOURCE_DIR}/include/ki/*.hpp")
-set(ki_header_check_sources "")
-foreach(header IN LISTS ki_public_headers)
-  string(MAKE_C_IDENTIFIER "${header}" header_id)
-  set(source "${CMAKE_CURRENT_BINARY_DIR}/header_check/${header_id}.cpp")
-  file(CONFIGURE OUTPUT "${source}" CONTENT "#include <${header}>\n")
-  list(APPEND ki_header_check_sources "${source}")
-endforeach()
-add_library(ki-header-check OBJECT ${ki_header_check_sources})
-target_link_libraries(ki-header-check PRIVATE ki::ki)
-ki_target_warnings(ki-header-check)
+# integration: several libraries together through their public headers.
+add_executable(ki_integration_tests
+  integration/form.test.cpp
+  integration/readme.test.cpp
+  integration/router_api.test.cpp
+  integration/shared_library_context/context.test.cpp
+  integration/toolchain.test.cpp)
+target_include_directories(ki_integration_tests PRIVATE support)
+target_link_libraries(ki_integration_tests PRIVATE
+  ki::ki ki::test ki_context_probe llhttp::llhttp Catch2::Catch2WithMain)
+ki_target_warnings(ki_integration_tests)
+catch_discover_tests(ki_integration_tests DISCOVERY_MODE PRE_TEST)

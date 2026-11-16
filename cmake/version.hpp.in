@@ -1,5 +1,9 @@
 #pragma once
 
+#include <ki/export.hpp>
+
+#include <string_view>
+
 // Macros rather than constants so consumers can test them in #if.
 // NOLINTBEGIN(modernize-macro-to-enum)
 #define KI_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
@@ -7,3 +11,11 @@
 #define KI_VERSION_PATCH @PROJECT_VERSION_PATCH@
 #define KI_VERSION_STRING "@PROJECT_VERSION@"
 // NOLINTEND(modernize-macro-to-enum)
+
+namespace ki {
+
+// version returns the version of the linked ki library, which differs from KI_VERSION_STRING when
+// the headers and the library come from different releases.
+KI_EXPORT std::string_view version() noexcept;
+
+}  // namespace ki

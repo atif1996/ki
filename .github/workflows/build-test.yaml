@@ -1,0 +1,127 @@
+name: Build&Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }} (${{ matrix.linkage }})
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { name: linux-gcc-14, os: ubuntu-24.04, cc: gcc-14, cxx: g++-14 }
+          - { name: linux-clang-19, os: ubuntu-24.04, cc: clang-19, cxx: clang++-19, apt: clang-19 }
+          - { name: macos, os: macos-15 }
+          - { name: windows-msvc, os: windows-2025 }
+        linkage: [static, shared]
+    defaults:
+      run:
+        shell: bash
+    env:
+      SHARED: ${{ matrix.linkage == 'shared' && 'True' || 'False' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Conan
+        run: pip install "conan>=2.33,<3"
+      - name: Install compiler
+        if: matrix.config.apt
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.config.apt }}
+      - name: Conan profile
+        run: |
+          if [ -n "${{ matrix.config.cc }}" ]; then
+            export CC=${{ matrix.config.cc }} CXX=${{ matrix.config.cxx }}
+          fi
+          conan profile detect --force
+          if [ -n "${{ matrix.config.cc }}" ]; then
+            printf '[conf]\ntools.build:compiler_executables={"c": "%s", "cpp": "%s"}\n' \
+              "${{ matrix.config.cc }}" "${{ matrix.config.cxx }}" >> "$(conan profile path default)"
+          fi
+          cat "$(conan profile path default)"
+      - name: Build and test
+        run: conan build . -s compiler.cppstd=23 -o "&:shared=$SHARED" -c user.project:werror=True --build=missing
+      - name: Package and build the consumer project
+        run: conan create . -s compiler.cppstd=23 -o "&:shared=$SHARED" --build=missing
+      - name: Plain CMake consumers
+        run: |
+          deps=$(ls -d build/Release/generators build/generators 2>/dev/null | head -1)
+          python scripts/ci_checks.py consumers --deps "$deps" $([ "$SHARED" = True ] && echo --shared)
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Conan
+        run: |
+          pip install "conan>=2.33,<3"
+          conan profile detect --force
+      - name: Build and test with AddressSanitizer and UndefinedBehaviorSanitizer
+        run: >
+          conan build . -s compiler.cppstd=23 --build=missing
+          -c tools.build:cxxflags='["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined", "-fno-omit-frame-pointer", "-g"]'
+          -c tools.build:exelinkflags='["-fsanitize=address,undefined"]'
+          -c tools.build:sharedlinkflags='["-fsanitize=address,undefined"]'
+
+  checks:
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Conan and clang-tidy
+        run: |
+          pip install "conan>=2.33,<3"
+          conan profile detect --force
+          sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Policy
+        run: python scripts/ci_checks.py policy
+      - name: Versions
+        run: python scripts/ci_checks.py versions
+      - name: Dependencies
+        run: python scripts/ci_checks.py deps
+      - name: C++20 is rejected
+        run: |
+          if conan create . -s compiler.cppstd=20 --build=missing > cpp20.log 2>&1; then
+            echo "conan create accepted C++20"; exit 1
+          fi
+          grep "required C++ standard (23)" cpp20.log
+      - name: clang-tidy
+        run: conan build . -s compiler.cppstd=23 -c user.project:clang_tidy=True --build=missing
+
+  vcpkg:
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update vcpkg to reach the manifest baseline
+        run: |
+          git -C "$VCPKG_INSTALLATION_ROOT" pull --quiet
+          "$VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> "$GITHUB_ENV"
+      - name: Build and test
+        run: |
+          cmake --preset vcpkg-release
+          cmake --build --preset vcpkg-release
+          ctest --preset vcpkg-release
