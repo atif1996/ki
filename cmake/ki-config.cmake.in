@@ -5,4 +5,10 @@ find_dependency(asio CONFIG)
 find_dependency(re2 CONFIG)
 
 include("${CMAKE_CURRENT_LIST_DIR}/ki-targets.cmake")
+# The module targets (ki::ki_module, ...) exist when ki was built with them, and only builds that can compile
+# modules can use them. CMake 3.28 compiles an installed module without its dependencies' include paths.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/ki-module-targets.cmake" AND NOT CMAKE_VERSION VERSION_LESS 3.29
+   AND CMAKE_GENERATOR MATCHES "^(Ninja|Visual Studio)")
+  include("${CMAKE_CURRENT_LIST_DIR}/ki-module-targets.cmake")
+endif()
 check_required_components(ki)

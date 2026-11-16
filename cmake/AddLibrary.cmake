@@ -1,14 +1,16 @@
-# ki_add_library(<name> SOURCES <files> HEADERS <files>
+# ki_add_library(<name> SOURCES <files> HEADERS <files> [MODULE <file>]
 #                [TESTS <files>] [PUBLIC_DEPS <targets>] [PRIVATE_DEPS <targets>] [TEST_DEPS <targets>])
 #
 # Adds the library in ki/<name> as the target ki::<name>, with an export header at <ki/<name>/export.hpp>,
 # C++23 required of its consumers, and install rules. The name "ki" is the main library: it lives in ki/
 # itself, its target is ki::ki and its export header is <ki/export.hpp>. HEADERS are the public headers;
-# other headers in the directory stay private and are not installed. When tests are enabled, TESTS are built into one executable
+# other headers in the directory stay private and are not installed. When modules are on (cmake/Modules.cmake),
+# MODULE is built into ki::<name>_module, a static library linking ki::<name>, so a library's own users never
+# depend on module support. When tests are enabled, TESTS are built into one executable
 # and registered with CTest, and every public header is compiled alone to prove it includes what it uses.
 # Paths are relative to the calling directory.
 function(ki_add_library name)
-  cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;HEADERS;TESTS;PUBLIC_DEPS;PRIVATE_DEPS;TEST_DEPS")
+  cmake_parse_arguments(PARSE_ARGV 1 arg "" "MODULE" "SOURCES;HEADERS;TESTS;PUBLIC_DEPS;PRIVATE_DEPS;TEST_DEPS")
   if(name STREQUAL "ki")
     set(target ki)
     set(include_dir ki)
@@ -57,6 +59,22 @@ function(ki_add_library name)
   endif()
 
   install(TARGETS ${target} EXPORT ki-targets FILE_SET HEADERS FILE_SET generated_headers)
+
+  if(KI_MODULES_ENABLED AND arg_MODULE)
+    add_library(${target}_module STATIC)
+    add_library(ki::${name}_module ALIAS ${target}_module)
+    target_sources(${target}_module PUBLIC
+      FILE_SET CXX_MODULES BASE_DIRS "${PROJECT_SOURCE_DIR}" FILES ${arg_MODULE})
+    target_link_libraries(${target}_module PUBLIC ki::${name})
+    target_compile_features(${target}_module PUBLIC cxx_std_23)
+    set_target_properties(${target}_module PROPERTIES
+      EXPORT_NAME ${name}_module
+      CXX_EXTENSIONS OFF
+      POSITION_INDEPENDENT_CODE ON)
+    # No warning flags: they would be exported with the module and imposed on consumers' builds of it.
+    install(TARGETS ${target}_module EXPORT ki-module-targets
+      FILE_SET CXX_MODULES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  endif()
 
   if(NOT KI_BUILD_TESTS)
     return()

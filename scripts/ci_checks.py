@@ -47,7 +47,7 @@ def check_policy(_args):
     for directory in ("ki",):
         for path in sorted((ROOT / directory).rglob("*")):
             # Tests sit next to the code; the rules are for the library, not for its tests.
-            if path.suffix not in {".hpp", ".cpp", ".h", ".ipp"} or path.name.endswith(".test.cpp"):
+            if path.suffix not in {".hpp", ".cpp", ".cppm", ".h", ".ipp"} or path.name.endswith(".test.cpp"):
                 continue
             code = strip_comments_and_strings(path.read_text(encoding="utf-8"))
             for lineno, line in enumerate(code.splitlines(), start=1):

@@ -33,6 +33,7 @@ ki_add_library(ki
     strip_prefix.hpp
     transport.hpp
     url.hpp
+  MODULE ki.cppm
   TESTS
     context.test.cpp
     detail/strings.test.cpp

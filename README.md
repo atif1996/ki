@@ -114,6 +114,34 @@ target_link_libraries(app_tests PRIVATE ki::test)     # the Recorder, for tests 
 
 ki requires C++23 and passes that requirement to every target that links it.
 
+## C++ modules
+
+Each library can also be imported as a module that re-exports its headers:
+
+```cpp
+import ki;        // link ki::ki_module
+import ki.log;    // link ki::log_module
+import ki.test;   // link ki::test_module
+```
+
+The build decides whether to make them. With `KI_MODULES=AUTO`, the default, CMake compiles a module that
+exports an Asio coroutine and a file that imports it, and builds ki's modules only if that works; otherwise it
+prints why and carries on with headers. `KI_MODULES=ON` makes a failed check an error, and `OFF` skips it.
+With Conan, pass `-c user.project:modules=ON`.
+
+Modules need CMake 3.28 or newer and the Ninja or Visual Studio generator; Conan uses Makefiles unless you add
+`-c tools.cmake.cmaketoolchain:generator=Ninja`. A project that imports an installed ki needs CMake 3.29 or
+newer and `set(CMAKE_CXX_EXTENSIONS OFF)`: the module is compiled as standard C++23, and Clang rejects a module
+built with different language options from the file importing it. In November 2026 the check passes on Clang 19 (with
+`clang-scan-deps`) and Clang 23, and fails on Apple Clang 21, GCC 14 and GCC 16.2; MSVC is untested. Conan's
+generated CMake files do not describe modules, so the module targets come only from a plain CMake install or
+`add_subdirectory`. Macros such as `KI_VERSION_STRING` are never part of a module and still need
+`<ki/version.hpp>`.
+
+A file that writes handlers still includes the Asio headers it uses, such as `<asio/awaitable.hpp>`. A module
+keeps only the parts of a header it names itself, and coroutine code instantiates Asio templates, and needs
+`std::coroutine_traits`, from the rest.
+
 ## Layout
 
 ki follows the [moderncpp template](https://github.com/atif1996/moderncpp): headers and sources sit together
@@ -148,7 +176,7 @@ python3 scripts/linux_check.py --compiler gcc-14
 ## Repository checks
 
 ```sh
-git ls-files '*.cpp' '*.hpp' | xargs clang-format --dry-run --Werror   # formatting; CI pins clang-format 22.1.8
+git ls-files '*.cpp' '*.cppm' '*.hpp' | xargs clang-format --dry-run --Werror   # CI pins clang-format 22.1.8
 python3 scripts/ci_checks.py policy       # no throw or substr in library code
 python3 scripts/ci_checks.py versions     # CMakeLists.txt, vcpkg.json and the Conan recipe agree
 python3 scripts/ci_checks.py deps         # no forbidden dependencies

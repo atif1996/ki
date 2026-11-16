@@ -56,6 +56,35 @@ jobs:
           deps=$(ls -d build/Release/generators build/generators 2>/dev/null | head -1)
           python scripts/ci_checks.py consumers --deps "$deps" $([ "$SHARED" = True ] && echo --shared)
 
+  modules:
+    name: modules (${{ matrix.cc }}, KI_MODULES=${{ matrix.modules }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Clang 19 must build the modules; GCC 14 must fall back to headers and still pass.
+          - { cc: clang-19, cxx: clang++-19, apt: "clang-19 clang-tools-19", modules: "ON" }
+          - { cc: gcc-14, cxx: g++-14, apt: "", modules: AUTO }
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Conan, Ninja and the compiler
+        run: |
+          pip install "conan>=2.33,<3"
+          sudo apt-get update && sudo apt-get install -y ninja-build ${{ matrix.apt }}
+          conan profile detect --force
+      - name: Build and test with Ninja
+        run: >
+          conan build . -s compiler.cppstd=23 -c user.project:werror=True
+          -c user.project:modules=${{ matrix.modules }}
+          -c tools.cmake.cmaketoolchain:generator=Ninja --build=missing
+
   sanitizers:
     runs-on: ubuntu-24.04
     env:
@@ -93,7 +122,7 @@ jobs:
           conan profile detect --force
           sudo apt-get update && sudo apt-get install -y clang-tidy
       - name: Formatting
-        run: git ls-files '*.cpp' '*.hpp' | xargs clang-format --dry-run --Werror
+        run: git ls-files '*.cpp' '*.cppm' '*.hpp' | xargs clang-format --dry-run --Werror
       - name: Policy
         run: python scripts/ci_checks.py policy
       - name: Versions

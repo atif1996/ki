@@ -32,3 +32,11 @@ target_link_libraries(ki_integration_tests PRIVATE
   ki::ki ki::test ki_context_probe llhttp::llhttp Catch2::Catch2WithMain)
 ki_target_warnings(ki_integration_tests)
 catch_discover_tests(ki_integration_tests DISCOVERY_MODE PRE_TEST)
+
+# modules: the libraries used through import alone.
+if(KI_MODULES_ENABLED)
+  add_executable(ki_module_tests modules/import.test.cpp)
+  target_link_libraries(ki_module_tests PRIVATE ki::ki_module ki::log_module ki::test_module Catch2::Catch2WithMain)
+  ki_target_warnings(ki_module_tests)
+  catch_discover_tests(ki_module_tests DISCOVERY_MODE PRE_TEST)
+endif()

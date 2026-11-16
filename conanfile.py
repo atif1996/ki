@@ -68,6 +68,9 @@ class KiConan(ConanFile):
             "user.project:werror", default=False, check_type=bool)
         tc.cache_variables["KI_CLANG_TIDY"] = self.conf.get(
             "user.project:clang_tidy", default=False, check_type=bool)
+        # AUTO, ON or OFF; modules also need a generator that builds them, such as
+        # -c tools.cmake.cmaketoolchain:generator=Ninja.
+        tc.cache_variables["KI_MODULES"] = self.conf.get("user.project:modules", default="AUTO", check_type=str)
         tc.generate()
 
     def build(self):

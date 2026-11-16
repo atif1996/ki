@@ -11,6 +11,7 @@ include(GenerateExportHeader)
 include(CMakePackageConfigHelpers)
 include(cmake/Warnings.cmake)
 include(cmake/AddLibrary.cmake)
+include(cmake/Modules.cmake)
 
 option(KI_BUILD_TESTS "Build the unit, conformance and integration tests" ${PROJECT_IS_TOP_LEVEL})
 option(KI_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
@@ -28,6 +29,7 @@ endif()
 
 find_package(asio CONFIG REQUIRED)
 find_package(re2 CONFIG REQUIRED)
+ki_detect_modules(KI_MODULES_ENABLED)
 
 if(KI_BUILD_TESTS)
   enable_testing()
@@ -50,3 +52,7 @@ write_basic_package_version_file("${PROJECT_BINARY_DIR}/ki-config-version.cmake"
   COMPATIBILITY SameMinorVersion)
 install(FILES "${PROJECT_BINARY_DIR}/ki-config.cmake" "${PROJECT_BINARY_DIR}/ki-config-version.cmake"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ki")
+if(KI_MODULES_ENABLED)
+  install(EXPORT ki-module-targets NAMESPACE ki:: DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ki"
+    CXX_MODULES_DIRECTORY modules)
+endif()

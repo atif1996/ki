@@ -2,7 +2,8 @@
 """Build and test ki with Linux compilers in a local container (Colima, Docker Desktop or any Docker engine).
 
 Runs the steps of the CI Linux jobs for each compiler: a shared development build with tests and warnings as
-errors, conan create for static and shared packages, and the plain CMake consumer checks. The repository is
+errors, conan create for static and shared packages, the plain CMake consumer checks, and a Ninja build that
+builds the C++ modules where the compiler can. The repository is
 copied into the container, so Linux builds never touch the host's build/ directory. Each compiler keeps its
 Conan package cache in a named Docker volume, so only the first run builds dependencies, and all compilers share
 one download cache volume, so dependency sources cross the network once.
@@ -15,9 +16,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = "ki-linux-check"
+# Each compiler's C++ compiler driver pair, and what KI_MODULES the modules step requires: Clang 19 builds ki's
+# modules, while GCC 14 must fall back to headers without failing the build.
 COMPILERS = {
-    "gcc-14": ("gcc-14", "g++-14"),
-    "clang-19": ("clang-19", "clang++-19"),
+    "gcc-14": ("gcc-14", "g++-14", "AUTO"),
+    "clang-19": ("clang-19", "clang++-19", "ON"),
 }
 
 STEPS = """
@@ -45,6 +48,11 @@ conan create . -s compiler.cppstd=23 -o "ki/*:shared=True" --build=missing
 echo "::: {name}: plain CMake consumers"
 python3 scripts/ci_checks.py consumers --deps build/Release/generators --shared
 python3 scripts/ci_checks.py consumers --deps build/Release/generators
+echo "::: {name}: Ninja build with KI_MODULES={modules}"
+conan build . -s compiler.cppstd=23 -c user.project:werror=True -c user.project:modules={modules} \\
+    -c tools.cmake.cmaketoolchain:generator=Ninja -c tools.cmake.cmake_layout:build_folder=build/modules \\
+    --build=missing 2>&1 | tee modules.log
+grep "ki: C++ modules" modules.log
 echo "::: {name}: all steps passed"
 """
 
@@ -70,8 +78,8 @@ def main():
     names = list(COMPILERS) if args.compiler == "all" else [args.compiler]
     failed = []
     for name in names:
-        cc, cxx = COMPILERS[name]
-        script = STEPS.format(name=name, cc=cc, cxx=cxx)
+        cc, cxx, modules = COMPILERS[name]
+        script = STEPS.format(name=name, cc=cc, cxx=cxx, modules=modules)
         code = run(["docker", "run", "--rm",
                     "-v", f"{ROOT}:/src:ro",
                     "-v", f"ki-conan-{name}:/root/.conan2",
