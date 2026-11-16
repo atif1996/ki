@@ -75,38 +75,39 @@ TEST_CASE("chi TestTree") {
     r.get("/hubs/{hubID}/*", sub);
     r.get("/hubs/{hubID}/users", named("hHubView3"));
 
-    check(r, {
-                 {"GET", "/", "hIndex", {}, {}},
-                 {"GET", "/favicon.ico", "hFavicon", {}, {}},
-                 {"GET", "/pages", "", {}, {}},
-                 {"GET", "/pages/", "hStub", {"*"}, {""}},
-                 {"GET", "/pages/yes", "hStub", {"*"}, {"yes"}},
-                 {"GET", "/article", "hArticleList", {}, {}},
-                 {"GET", "/article/", "hArticleList", {}, {}},
-                 {"GET", "/article/near", "hArticleNear", {}, {}},
-                 {"GET", "/article/neard", "hArticleShow", {"id"}, {"neard"}},
-                 {"GET", "/article/123", "hArticleShow", {"id"}, {"123"}},
-                 {"GET", "/article/123/456", "hArticleShowOpts", {"id", "opts"}, {"123", "456"}},
-                 {"GET", "/article/@peter", "hArticleByUser", {"user"}, {"peter"}},
-                 {"GET", "/article/22//related", "hArticleShowRelated", {"id"}, {"22"}},
-                 {"GET", "/article/111/edit", "hStub", {"iffd"}, {"111"}},
-                 {"GET", "/article/slug/sept/-/4/2015", "hArticleSlug", {"month", "day", "year"}, {"sept", "4", "2015"}},
-                 {"GET", "/article/:id", "hArticleShow", {"id"}, {":id"}},
-                 {"GET", "/admin/user", "hUserList", {}, {}},
-                 {"GET", "/admin/user/", "hUserList", {}, {}},
-                 {"GET", "/admin/user/1", "hUserShow", {"id"}, {"1"}},
-                 {"GET", "/admin/user//1", "hUserShow", {"id"}, {"1"}},
-                 {"GET", "/admin/hi", "hAdminCatchall", {"*"}, {"hi"}},
-                 {"GET", "/admin/lots/of/:fun", "hAdminCatchall", {"*"}, {"lots/of/:fun"}},
-                 {"GET", "/admin/apps/333", "hAdminAppShow", {"id"}, {"333"}},
-                 {"GET", "/admin/apps/333/woot", "hAdminAppShowCatchall", {"id", "*"}, {"333", "woot"}},
-                 {"GET", "/hubs/123/view", "hHubView1", {"hubID"}, {"123"}},
-                 {"GET", "/hubs/123/view/index.html", "hHubView2", {"hubID", "*"}, {"123", "index.html"}},
-                 {"GET", "/hubs/123/users", "hHubView3", {"hubID"}, {"123"}},
-                 {"GET", "/users/123/profile", "hUserProfile", {"userID"}, {"123"}},
-                 {"GET", "/users/super/123/okay/yes", "hUserSuper", {"*"}, {"123/okay/yes"}},
-                 {"GET", "/users/123/okay/yes", "hUserAll", {"*"}, {"123/okay/yes"}},
-             });
+    check(r,
+          {
+              {"GET", "/", "hIndex", {}, {}},
+              {"GET", "/favicon.ico", "hFavicon", {}, {}},
+              {"GET", "/pages", "", {}, {}},
+              {"GET", "/pages/", "hStub", {"*"}, {""}},
+              {"GET", "/pages/yes", "hStub", {"*"}, {"yes"}},
+              {"GET", "/article", "hArticleList", {}, {}},
+              {"GET", "/article/", "hArticleList", {}, {}},
+              {"GET", "/article/near", "hArticleNear", {}, {}},
+              {"GET", "/article/neard", "hArticleShow", {"id"}, {"neard"}},
+              {"GET", "/article/123", "hArticleShow", {"id"}, {"123"}},
+              {"GET", "/article/123/456", "hArticleShowOpts", {"id", "opts"}, {"123", "456"}},
+              {"GET", "/article/@peter", "hArticleByUser", {"user"}, {"peter"}},
+              {"GET", "/article/22//related", "hArticleShowRelated", {"id"}, {"22"}},
+              {"GET", "/article/111/edit", "hStub", {"iffd"}, {"111"}},
+              {"GET", "/article/slug/sept/-/4/2015", "hArticleSlug", {"month", "day", "year"}, {"sept", "4", "2015"}},
+              {"GET", "/article/:id", "hArticleShow", {"id"}, {":id"}},
+              {"GET", "/admin/user", "hUserList", {}, {}},
+              {"GET", "/admin/user/", "hUserList", {}, {}},
+              {"GET", "/admin/user/1", "hUserShow", {"id"}, {"1"}},
+              {"GET", "/admin/user//1", "hUserShow", {"id"}, {"1"}},
+              {"GET", "/admin/hi", "hAdminCatchall", {"*"}, {"hi"}},
+              {"GET", "/admin/lots/of/:fun", "hAdminCatchall", {"*"}, {"lots/of/:fun"}},
+              {"GET", "/admin/apps/333", "hAdminAppShow", {"id"}, {"333"}},
+              {"GET", "/admin/apps/333/woot", "hAdminAppShowCatchall", {"id", "*"}, {"333", "woot"}},
+              {"GET", "/hubs/123/view", "hHubView1", {"hubID"}, {"123"}},
+              {"GET", "/hubs/123/view/index.html", "hHubView2", {"hubID", "*"}, {"123", "index.html"}},
+              {"GET", "/hubs/123/users", "hHubView3", {"hubID"}, {"123"}},
+              {"GET", "/users/123/profile", "hUserProfile", {"userID"}, {"123"}},
+              {"GET", "/users/super/123/okay/yes", "hUserSuper", {"*"}, {"123/okay/yes"}},
+              {"GET", "/users/123/okay/yes", "hUserAll", {"*"}, {"123/okay/yes"}},
+          });
 }
 
 // chi: TestTreeMoar
@@ -141,7 +142,10 @@ TEST_CASE("chi TestTreeMoar") {
                  {"GET", "/articles/789!sup", "hStub4", {"iidd"}, {"789"}},
                  {"GET", "/articles/123:sync", "hStub2", {"id", "op"}, {"123", "sync"}},
                  {"GET", "/articles/456/posts/1", "hStub6", {"id", "pid"}, {"456", "1"}},
-                 {"GET", "/articles/456/posts/09/04/1984/juice", "hStub7", {"id", "month", "day", "year", "slug"},
+                 {"GET",
+                  "/articles/456/posts/09/04/1984/juice",
+                  "hStub7",
+                  {"id", "month", "day", "year", "slug"},
                   {"456", "09", "04", "1984", "juice"}},
                  {"GET", "/articles/456.json", "hStub10", {"id"}, {"456"}},
                  {"GET", "/articles/456/data.json", "hStub11", {"id"}, {"456"}},
@@ -224,8 +228,8 @@ TEST_CASE("chi TestTreeFindPattern") {
         r.get("/articles/{slug}/{uid}/*", named("hStub3"));
         return r;
     };
-    for (const auto* existing : {"/pages", "/pages/", "/articles/{id}", "/articles/{something}",
-                                 "/articles/{slug}/{uid}"}) {
+    for (const auto* existing :
+         {"/pages", "/pages/", "/articles/{id}", "/articles/{something}", "/articles/{slug}/{uid}"}) {
         INFO(existing);
         auto r = with_routes();
         r.mount(existing, named("mounted"));
@@ -257,12 +261,12 @@ TEST_CASE("chi duplicate registrations are rejected") {
         const char* second;
         const char* path;
     };
-    for (const auto& c : {Pair{"/article/{id}", "/article/{id}", "/article/1"},
-                          Pair{"/article/{sup}/{opts}", "/article/{id}/{opts}", "/article/1/2"},
-                          Pair{"/admin/user/", "/admin/user/", "/admin/user/"},
-                          Pair{"/admin/*", "/admin/*", "/admin/x"},
-                          Pair{"/articles/{id}:{op}", "/articles/{id}:{op}", "/articles/1:sync"},
-                          Pair{"/ping/{id}", "/ping/{iidd}", "/ping/7"}}) {
+    for (const auto& c :
+         {Pair{"/article/{id}", "/article/{id}", "/article/1"},
+          Pair{"/article/{sup}/{opts}", "/article/{id}/{opts}", "/article/1/2"},
+          Pair{"/admin/user/", "/admin/user/", "/admin/user/"}, Pair{"/admin/*", "/admin/*", "/admin/x"},
+          Pair{"/articles/{id}:{op}", "/articles/{id}:{op}", "/articles/1:sync"},
+          Pair{"/ping/{id}", "/ping/{iidd}", "/ping/7"}}) {
         INFO(c.second);
         ki::Router r;
         r.get(c.first, named("first"));

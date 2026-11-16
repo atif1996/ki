@@ -25,7 +25,9 @@ int hex_value(char c) noexcept {
 
 bool is_alpha(char c) noexcept { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 bool is_digit(char c) noexcept { return c >= '0' && c <= '9'; }
-bool is_unreserved(char c) noexcept { return is_alpha(c) || is_digit(c) || c == '-' || c == '.' || c == '_' || c == '~'; }
+bool is_unreserved(char c) noexcept {
+    return is_alpha(c) || is_digit(c) || c == '-' || c == '.' || c == '_' || c == '~';
+}
 bool is_sub_delim(char c) noexcept { return std::string_view{"!$&'()*+,;="}.find(c) != std::string_view::npos; }
 
 std::unexpected<Error> invalid(std::string message) {
@@ -91,9 +93,8 @@ bool valid_authority(std::string_view authority, bool require_port) {
             port = detail::sub(authority, colon + 1);
             has_port = true;
         }
-        const bool host_ok = !host.empty() && std::ranges::all_of(host, [](char c) {
-            return is_unreserved(c) || is_sub_delim(c);
-        });
+        const bool host_ok =
+            !host.empty() && std::ranges::all_of(host, [](char c) { return is_unreserved(c) || is_sub_delim(c); });
         if (!host_ok) {
             return false;
         }
@@ -114,9 +115,8 @@ std::size_t scheme_length(std::string_view target) noexcept {
     if (target.empty() || !is_alpha(target.front())) {
         return 0;
     }
-    const auto end = std::ranges::find_if_not(target, [](char c) {
-        return is_alpha(c) || is_digit(c) || c == '+' || c == '-' || c == '.';
-    });
+    const auto end = std::ranges::find_if_not(
+        target, [](char c) { return is_alpha(c) || is_digit(c) || c == '+' || c == '-' || c == '.'; });
     return static_cast<std::size_t>(end - target.begin());
 }
 

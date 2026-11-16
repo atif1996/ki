@@ -22,7 +22,8 @@ namespace {
 
 std::string lower(std::string_view text) {
     std::string out{text};
-    std::ranges::transform(out, out.begin(), [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; });
+    std::ranges::transform(out, out.begin(),
+                           [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; });
     return out;
 }
 

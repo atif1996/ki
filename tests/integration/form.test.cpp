@@ -15,8 +15,7 @@ using Strings = std::vector<std::string_view>;
 
 // form runs read_form through the recorder, so the body is read the way a handler would read it.
 ki::ParsedForm form(std::string method, std::string target, std::string body,
-                    std::string_view content_type = "application/x-www-form-urlencoded",
-                    ki::FormOptions options = {}) {
+                    std::string_view content_type = "application/x-www-form-urlencoded", ki::FormOptions options = {}) {
     ki::Headers headers;
     if (!content_type.empty()) {
         REQUIRE(headers.set("Content-Type", content_type));
@@ -36,9 +35,9 @@ ki::ParsedForm form(std::string method, std::string target, std::string body,
 
 // go: TestParseFormQuery
 TEST_CASE("form holds body values before query values, post_form only body values") {
-    const auto parsed = form("POST", "/search?q=foo&q=bar&both=x&prio=1&orphan=nope&empty=not",
-                             "z=post&both=y&prio=2&=nokey&orphan&empty=&",
-                             "application/x-www-form-urlencoded; param=value");
+    const auto parsed =
+        form("POST", "/search?q=foo&q=bar&both=x&prio=1&orphan=nope&empty=not",
+             "z=post&both=y&prio=2&=nokey&orphan&empty=&", "application/x-www-form-urlencoded; param=value");
     REQUIRE_FALSE(parsed.error);
     REQUIRE(parsed.form.get("q") == "foo");
     REQUIRE(parsed.form.get("z") == "post");
@@ -84,8 +83,8 @@ TEST_CASE("a parse error still yields initialised forms") {
 }
 
 TEST_CASE("a form body over the limit is rejected") {
-    const auto parsed = form("POST", "/", std::string(100, 'a'), "application/x-www-form-urlencoded",
-                             {.max_body = 10, .query = {}});
+    const auto parsed =
+        form("POST", "/", std::string(100, 'a'), "application/x-www-form-urlencoded", {.max_body = 10, .query = {}});
     REQUIRE(parsed.error);
     REQUIRE(parsed.error->status == ki::Status::content_too_large);
     REQUIRE(parsed.post_form.empty());

@@ -113,11 +113,13 @@ TEST_CASE("the null sink disables every level") {
 TEST_CASE("text sink writes slog-style key=value lines") {
     Lines out;
     ki::log::TextSink sink{out.writer()};
-    const std::vector<Attr> attrs = {{"user", "ada"}, {"id", 42}, {"delta", -3}, {"ok", true}, {"ratio", 0.5},
-                                     {"bytes", std::uint64_t{18446744073709551615ULL}}};
+    const std::vector<Attr> attrs = {{"user", "ada"}, {"id", 42},
+                                     {"delta", -3},   {"ok", true},
+                                     {"ratio", 0.5},  {"bytes", std::uint64_t{18446744073709551615ULL}}};
     REQUIRE_FALSE(sink.write(record(Level::info, "hello", attrs)));
-    REQUIRE(out.text == "time=2026-10-31T12:00:00.123Z level=INFO msg=hello user=ada id=42 delta=-3 ok=true "
-                        "ratio=0.5 bytes=18446744073709551615\n");
+    REQUIRE(out.text ==
+            "time=2026-10-31T12:00:00.123Z level=INFO msg=hello user=ada id=42 delta=-3 ok=true "
+            "ratio=0.5 bytes=18446744073709551615\n");
 }
 
 // T1.11
@@ -144,12 +146,13 @@ TEST_CASE("json sink writes non-finite numbers as strings") {
 TEST_CASE("text sink quotes and escapes control characters, quotes and spaces") {
     Lines out;
     ki::log::TextSink sink{out.writer()};
-    const std::vector<Attr> attrs = {{"path", "/a\r\nInjected: yes"}, {"quote", "say \"hi\""}, {"esc", "\x1b[31m"},
-                                     {"empty", ""}, {"bad key", "v"}};
+    const std::vector<Attr> attrs = {
+        {"path", "/a\r\nInjected: yes"}, {"quote", "say \"hi\""}, {"esc", "\x1b[31m"}, {"empty", ""}, {"bad key", "v"}};
     REQUIRE_FALSE(sink.write(record(Level::error, "line1\nline2", attrs)));
-    REQUIRE(out.text == "time=2026-10-31T12:00:00.123Z level=ERROR msg=\"line1\\nline2\" "
-                        "path=\"/a\\r\\nInjected: yes\" quote=\"say \\\"hi\\\"\" esc=\"\\x1b[31m\" empty=\"\" "
-                        "\"bad key\"=v\n");
+    REQUIRE(out.text ==
+            "time=2026-10-31T12:00:00.123Z level=ERROR msg=\"line1\\nline2\" "
+            "path=\"/a\\r\\nInjected: yes\" quote=\"say \\\"hi\\\"\" esc=\"\\x1b[31m\" empty=\"\" "
+            "\"bad key\"=v\n");
     REQUIRE(out.split().size() == 1);
 }
 
@@ -176,8 +179,8 @@ TEST_CASE("attributes bound with with() appear on every record and not on the pa
     base.info("third");
 
     const auto records = sink->records();
-    REQUIRE(records == std::vector<std::string>{"first request_id=r1 k=v", "second request_id=r1 route=/users/{id}",
-                                                "third"});
+    REQUIRE(records ==
+            std::vector<std::string>{"first request_id=r1 k=v", "second request_id=r1 route=/users/{id}", "third"});
 }
 
 TEST_CASE("bound attributes own their strings") {

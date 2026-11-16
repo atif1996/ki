@@ -11,9 +11,9 @@
 #include <atomic>
 #include <map>
 #include <span>
-#include <typeinfo>
 #include <string>
 #include <thread>
+#include <typeinfo>
 #include <vector>
 
 using ki::Handler;
@@ -350,15 +350,15 @@ Handler with_session(std::string text) {
 }
 
 Handler hub_reply(std::string suffix, std::string param = "hubID") {
-    return [suffix = std::move(suffix), param = std::move(param)](Request& req,
-                                                                  Response& res) -> asio::awaitable<Result> {
-        std::string out = "/hubs/" + std::string{req.path_value(param)} + suffix;
-        if (suffix.ends_with("/view/")) {
-            out += req.path_value("*");
-        }
-        co_return co_await res.write(out + " reqid:" + req.value_or(request_id_key, "") +
-                                     " session:" + req.value_or(session_key, ""));
-    };
+    return
+        [suffix = std::move(suffix), param = std::move(param)](Request& req, Response& res) -> asio::awaitable<Result> {
+            std::string out = "/hubs/" + std::string{req.path_value(param)} + suffix;
+            if (suffix.ends_with("/view/")) {
+                out += req.path_value("*");
+            }
+            co_return co_await res.write(out + " reqid:" + req.value_or(request_id_key, "") +
+                                         " session:" + req.value_or(session_key, ""));
+        };
 }
 
 Router big_mux() {
@@ -495,12 +495,11 @@ TEST_CASE("chi TestMuxMiddlewareStack") {
                };
            }});
     int handled = 0;
-    r.with({counting(inline_init, inline_run)})
-        .get("/", [&](Request& req, Response& res) -> asio::awaitable<Result> {
-            ++handled;
-            co_return co_await res.write("inits:" + std::to_string(ctx_init) + " reqs:" + std::to_string(handled) +
-                                         " ctxValue:" + std::to_string(req.value_or(count_key, 0)));
-        });
+    r.with({counting(inline_init, inline_run)}).get("/", [&](Request& req, Response& res) -> asio::awaitable<Result> {
+        ++handled;
+        co_return co_await res.write("inits:" + std::to_string(ctx_init) + " reqs:" + std::to_string(handled) +
+                                     " ctxValue:" + std::to_string(req.value_or(count_key, 0)));
+    });
     r.get("/hi", text("wooot"));
 
     (void)body(r, "GET", "/");
@@ -575,10 +574,10 @@ Handler print_counter() {
 }
 
 Handler param_reply(std::string prefix, std::string param) {
-    return [prefix = std::move(prefix), param = std::move(param)](Request& req,
-                                                                  Response& res) -> asio::awaitable<Result> {
-        co_return co_await res.write(prefix + std::string{req.path_value(param)});
-    };
+    return
+        [prefix = std::move(prefix), param = std::move(param)](Request& req, Response& res) -> asio::awaitable<Result> {
+            co_return co_await res.write(prefix + std::string{req.path_value(param)});
+        };
 }
 
 }  // namespace
@@ -822,8 +821,8 @@ TEST_CASE("chi TestMuxRegexp3") {
 // chi: TestMuxSubrouterWildcardParam
 TEST_CASE("chi TestMuxSubrouterWildcardParam") {
     const Handler h = [](Request& req, Response& res) -> asio::awaitable<Result> {
-        co_return co_await res.write("param:" + std::string{req.path_value("param")} + " *:" +
-                                     std::string{req.path_value("*")});
+        co_return co_await res.write("param:" + std::string{req.path_value("param")} +
+                                     " *:" + std::string{req.path_value("*")});
     };
     Router r;
     r.get("/bare/{param}", h);
@@ -885,14 +884,14 @@ TEST_CASE("chi TestCustomHTTPMethod") {
     REQUIRE(body(r, "BOO", "/hi") == "custom method");
 
     std::map<std::string, std::string> expected{{"GET", "/"}, {"BOO", "/hi"}};
-    REQUIRE(ki::walk(r, [&](std::string_view method, std::string_view route, const Handler&,
-                            std::span<const Middleware>) -> Result {
-        const auto it = expected.find(std::string{method});
-        REQUIRE(it != expected.end());
-        REQUIRE(it->second == route);
-        expected.erase(it);
-        return {};
-    }));
+    REQUIRE(ki::walk(
+        r, [&](std::string_view method, std::string_view route, const Handler&, std::span<const Middleware>) -> Result {
+            const auto it = expected.find(std::string{method});
+            REQUIRE(it != expected.end());
+            REQUIRE(it->second == route);
+            expected.erase(it);
+            return {};
+        }));
     REQUIRE(expected.empty());
 
     Router other;
@@ -977,11 +976,12 @@ TEST_CASE("chi TestMuxFind") {
 // chi: TestWalker
 TEST_CASE("chi TestWalker") {
     std::vector<std::string> seen;
-    REQUIRE(ki::walk(big_mux(), [&](std::string_view method, std::string_view route, const Handler&,
-                                    std::span<const Middleware>) -> Result {
-        seen.push_back(std::string{method} + " " + std::string{route});
-        return {};
-    }));
+    REQUIRE(ki::walk(
+        big_mux(),
+        [&](std::string_view method, std::string_view route, const Handler&, std::span<const Middleware>) -> Result {
+            seen.push_back(std::string{method} + " " + std::string{route});
+            return {};
+        }));
     std::ranges::sort(seen);
     for (const auto& route : seen) {
         UNSCOPED_INFO(route);
@@ -996,11 +996,12 @@ TEST_CASE("chi TestWalker") {
 TEST_CASE("chi TestWalkInlineMiddlewaresAcrossSubrouter") {
     const auto count_middlewares = [](const Router& r) {
         std::size_t count = 0;
-        REQUIRE(ki::walk(r, [&](std::string_view, std::string_view, const Handler&,
-                                std::span<const Middleware> middlewares) -> Result {
-            count = middlewares.size();
-            return {};
-        }));
+        REQUIRE(ki::walk(
+            r,
+            [&](std::string_view, std::string_view, const Handler&, std::span<const Middleware> middlewares) -> Result {
+                count = middlewares.size();
+                return {};
+            }));
         return count;
     };
     SECTION("with + group wrapping route + with") {
@@ -1030,11 +1031,11 @@ TEST_CASE("chi TestWalkRouteWithHandlerAndSubrouter") {
         foo.get("/bar", text(""));
     });
     std::vector<std::string> routes;
-    REQUIRE(ki::walk(r, [&](std::string_view method, std::string_view route, const Handler&,
-                            std::span<const Middleware>) -> Result {
-        routes.push_back(std::string{method} + " " + std::string{route});
-        return {};
-    }));
+    REQUIRE(ki::walk(
+        r, [&](std::string_view method, std::string_view route, const Handler&, std::span<const Middleware>) -> Result {
+            routes.push_back(std::string{method} + " " + std::string{route});
+            return {};
+        }));
     REQUIRE(std::ranges::contains(routes, "GET /foo/bar"));
     REQUIRE(std::ranges::contains(routes, "GET /foo/bar/{id}"));
 }
@@ -1088,14 +1089,15 @@ TEST_CASE("chi TestWalkMiddlewaresAcrossGroupAndRoute") {
     });
 
     std::map<std::string, std::vector<std::string>> got;
-    REQUIRE(ki::walk(r, [&](std::string_view method, std::string_view route, const Handler&,
-                            std::span<const Middleware> middlewares) -> Result {
-        auto& names = got[std::string{method} + " " + std::string{route}];
-        for (const auto& m : middlewares) {
-            names.push_back(name_of(m));
-        }
-        return {};
-    }));
+    REQUIRE(ki::walk(r,
+                     [&](std::string_view method, std::string_view route, const Handler&,
+                         std::span<const Middleware> middlewares) -> Result {
+                         auto& names = got[std::string{method} + " " + std::string{route}];
+                         for (const auto& m : middlewares) {
+                             names.push_back(name_of(m));
+                         }
+                         return {};
+                     }));
     REQUIRE(got["GET /A"] == std::vector<std::string>{"requestID"});
     REQUIRE(got["GET /B"] == std::vector<std::string>{"requestID", "timeout"});
     REQUIRE(got["GET /C/D"] == std::vector<std::string>{"requestID", "timeout"});

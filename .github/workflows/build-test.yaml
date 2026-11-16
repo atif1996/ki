@@ -87,11 +87,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Conan and clang-tidy
+      - name: Install Conan, clang-format and clang-tidy
         run: |
-          pip install "conan>=2.33,<3"
+          pip install "conan>=2.33,<3" clang-format==22.1.8
           conan profile detect --force
           sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Formatting
+        run: git ls-files '*.cpp' '*.hpp' | xargs clang-format --dry-run --Werror
       - name: Policy
         run: python scripts/ci_checks.py policy
       - name: Versions

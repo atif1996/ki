@@ -34,10 +34,10 @@ inline constexpr std::string_view any_method = "*";
 inline constexpr std::string_view stub_method = "#stub";
 
 struct Endpoint {
-    Handler handler{};  // with inline middlewares applied
-    Handler endpoint{};  // as registered, for walk()
+    Handler handler{};                      // with inline middlewares applied
+    Handler endpoint{};                     // as registered, for walk()
     std::vector<Middleware> middlewares{};  // inline middlewares, for walk()
-    std::uint64_t id = 0;  // identifies the registered handler; a mount's stub shares the mount's id
+    std::uint64_t id = 0;                   // identifies the registered handler; a mount's stub shares the mount's id
     std::string pattern{};
     std::vector<std::string> param_keys{};
 };

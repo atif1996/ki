@@ -148,6 +148,7 @@ python3 scripts/linux_check.py --compiler gcc-14
 ## Repository checks
 
 ```sh
+git ls-files '*.cpp' '*.hpp' | xargs clang-format --dry-run --Werror   # formatting; CI pins clang-format 22.1.8
 python3 scripts/ci_checks.py policy       # no throw or substr in library code
 python3 scripts/ci_checks.py versions     # CMakeLists.txt, vcpkg.json and the Conan recipe agree
 python3 scripts/ci_checks.py deps         # no forbidden dependencies

@@ -1,9 +1,9 @@
 #include <ki/strip_prefix.hpp>
 
 #include <ki/detail/strings.hpp>
+#include <ki/detail/tree.hpp>
 #include <ki/request.hpp>
 #include <ki/response.hpp>
-#include <ki/detail/tree.hpp>
 
 #include <string>
 #include <utility>
@@ -12,7 +12,7 @@ namespace ki {
 
 Handler strip_prefix(std::string_view prefix, Handler next) {
     return [prefix = detail::routing_path(prefix), next = std::move(next)](Request& req,
-                                                                        Response& res) -> asio::awaitable<Result> {
+                                                                           Response& res) -> asio::awaitable<Result> {
         auto& context = req.route();
         const std::string path = context.route_path.empty() ? detail::routing_path(req.raw_path()) : context.route_path;
         if (!path.starts_with(prefix)) {

@@ -45,17 +45,13 @@ TEST_CASE("pattern errors report the offset and reason") {
         const char* offset;
         const char* reason;
     };
-    for (const auto& c : {Case{"/{wx", "offset 1", "'}' is missing"},
-                          Case{"/a/{/}/c", "offset 3", "bad wildcard name"},
-                          Case{"/a/{%61}/c", "offset 3", "bad wildcard name"},
-                          Case{"/{a$}", "offset 1", "bad wildcard name"},
-                          Case{"/{}", "offset 1", "empty wildcard"},
-                          Case{"/{...}", "offset 1", "empty wildcard"},
-                          Case{"/{$...}", "offset 1", "bad wildcard name"},
-                          Case{"/{$}", "offset 1", "bad wildcard name"},
-                          Case{"/{a...}/", "offset 1", "not at end"},
-                          Case{"/{a...}/x", "offset 1", "not at end"},
-                          Case{"/a/{x}/b/{x...}", "offset 9", "duplicate"}}) {
+    for (const auto& c :
+         {Case{"/{wx", "offset 1", "'}' is missing"}, Case{"/a/{/}/c", "offset 3", "bad wildcard name"},
+          Case{"/a/{%61}/c", "offset 3", "bad wildcard name"}, Case{"/{a$}", "offset 1", "bad wildcard name"},
+          Case{"/{}", "offset 1", "empty wildcard"}, Case{"/{...}", "offset 1", "empty wildcard"},
+          Case{"/{$...}", "offset 1", "bad wildcard name"}, Case{"/{$}", "offset 1", "bad wildcard name"},
+          Case{"/{a...}/", "offset 1", "not at end"}, Case{"/{a...}/x", "offset 1", "not at end"},
+          Case{"/a/{x}/b/{x...}", "offset 9", "duplicate"}}) {
         INFO(c.pattern);
         Router r;
         r.get(c.pattern, named("never"));
@@ -194,7 +190,8 @@ using ki::Response;
 using ki::Result;
 
 Handler write_query() {
-    return [](Request& req, Response& res) -> asio::awaitable<Result> { co_return co_await res.write(req.raw_query()); };
+    return
+        [](Request& req, Response& res) -> asio::awaitable<Result> { co_return co_await res.write(req.raw_query()); };
 }
 
 ki::test::Recorded fetch(const ki::Handler& handler, std::string method, std::string target) {
@@ -303,11 +300,11 @@ TEST_CASE("HostRouter routes by host, falling back for other hosts") {
         const char* url;
         const char* expected;
     };
-    for (const auto& c : {Case{"http://localhost/someDir/apage", "someDir"}, Case{"http://localhost/%23/apage", "hash"},
-                          Case{"http://localhost/otherDir/apage", "Default"},
-                          Case{"http://someHost.com/someDir/apage", "someHost.com/someDir"},
-                          Case{"http://otherHost.com/someDir/apage", "someDir"},
-                          Case{"http://otherHost.com/aDir/apage", "Default"}}) {
+    for (const auto& c :
+         {Case{"http://localhost/someDir/apage", "someDir"}, Case{"http://localhost/%23/apage", "hash"},
+          Case{"http://localhost/otherDir/apage", "Default"},
+          Case{"http://someHost.com/someDir/apage", "someHost.com/someDir"},
+          Case{"http://otherHost.com/someDir/apage", "someDir"}, Case{"http://otherHost.com/aDir/apage", "Default"}}) {
         INFO(c.url);
         REQUIRE(fetch(hosts, "GET", c.url).body == c.expected);
     }
@@ -379,7 +376,8 @@ TEST_CASE("redirect resolves and cleans relative urls as Go does") {
         const char* want;
     };
     for (const auto& c :
-         {Case{"http://foobar.com/baz", "http://foobar.com/baz"}, Case{"https://foobar.com/baz", "https://foobar.com/baz"},
+         {Case{"http://foobar.com/baz", "http://foobar.com/baz"},
+          Case{"https://foobar.com/baz", "https://foobar.com/baz"},
           Case{"test://foobar.com/baz", "test://foobar.com/baz"}, Case{"//foobar.com/baz", "//foobar.com/baz"},
           Case{"/foobar.com/baz", "/foobar.com/baz"}, Case{"foobar.com/baz", "/qux/foobar.com/baz"},
           Case{"../quux/foobar.com/baz", "/quux/foobar.com/baz"}, Case{"///foobar.com/baz", "/foobar.com/baz"},

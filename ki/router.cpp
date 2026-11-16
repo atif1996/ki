@@ -24,8 +24,8 @@ struct TreeState {
     Tree tree{};
     // claims maps a pattern shape to its registered methods; "*" stands for a registration for every method.
     std::map<std::string, std::map<std::string, Claim, std::less<>>, std::less<>> claims{};
-    std::vector<std::string> methods{"CONNECT", "DELETE", "GET", "HEAD", "OPTIONS",
-                                     "PATCH", "POST", "PUT", "QUERY", "TRACE"};
+    std::vector<std::string> methods{"CONNECT", "DELETE", "GET", "HEAD",  "OPTIONS",
+                                     "PATCH",   "POST",   "PUT", "QUERY", "TRACE"};
     std::vector<Error> errors{};
     std::uint64_t next_id = 1;
     bool frozen = false;
@@ -52,7 +52,8 @@ using detail::RouterState;
 
 std::string upper(std::string_view text) {
     std::string out{text};
-    std::ranges::transform(out, out.begin(), [](char c) { return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c; });
+    std::ranges::transform(out, out.begin(),
+                           [](char c) { return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c; });
     return out;
 }
 
@@ -77,7 +78,9 @@ Handler default_method_not_allowed(std::vector<std::string> allowed) {
     };
 }
 
-Handler not_found_of(const RouterState& state) { return state.not_found ? state.not_found : Handler{default_not_found}; }
+Handler not_found_of(const RouterState& state) {
+    return state.not_found ? state.not_found : Handler{default_not_found};
+}
 
 Handler method_not_allowed_of(const RouterState& state, std::vector<std::string> allowed) {
     return state.method_not_allowed ? state.method_not_allowed : default_method_not_allowed(std::move(allowed));
@@ -100,7 +103,7 @@ void record_match(RouteContext& context, const detail::FindState& found) {
 
 // handler_for returns the endpoint serving method on node, if it has a handler.
 std::optional<std::reference_wrapper<const detail::Endpoint>> handler_for(const detail::Node& node,
-                                                                         std::string_view method) {
+                                                                          std::string_view method) {
     if (!node.endpoints) {
         return std::nullopt;
     }
@@ -144,7 +147,8 @@ asio::awaitable<Result> route_request(std::shared_ptr<RouterState> state, Reques
     if (found.method_not_allowed) {
         co_return co_await method_not_allowed_of(*state, found.methods_allowed)(req, res);
     }
-    co_return co_await not_found_of(*state)(req, res);
+    const Handler not_found = not_found_of(*state);
+    co_return co_await not_found(req, res);
 }
 
 // router_handler routes through state without owning it, so the state's own handler does not keep it alive.
@@ -206,12 +210,14 @@ std::string describe(const detail::Methods& methods, std::string_view pattern) {
 // check_claim decides which methods a registration sets on a shape, or reports the registration it
 // conflicts with. An explicit registration for every method skips methods already registered explicitly,
 // so the more specific route keeps them, as Go's ServeMux prefers a method-specific pattern.
-std::expected<std::vector<std::string>, std::string> check_claim(const detail::TreeState& shared, const std::string& shape,
+std::expected<std::vector<std::string>, std::string> check_claim(const detail::TreeState& shared,
+                                                                 const std::string& shape,
                                                                  const Registration& registration) {
     const auto existing = shared.claims.find(shape);
     const auto conflict = [&](const std::string& method, const detail::Claim& claim) {
-        return std::unexpected("pattern '" + describe(registration.methods, registration.pattern) + "' conflicts with '" +
-                               (method == "*" ? std::string{} : method + " ") + claim.pattern + "', registered earlier");
+        return std::unexpected("pattern '" + describe(registration.methods, registration.pattern) +
+                               "' conflicts with '" + (method == "*" ? std::string{} : method + " ") + claim.pattern +
+                               "', registered earlier");
     };
     if (existing == shared.claims.end()) {
         return registration.methods.names;
@@ -486,7 +492,8 @@ void mount_impl(const std::shared_ptr<RouterState>& state, std::string_view patt
         set_method_not_allowed(*sub, state->method_not_allowed);
     }
 
-    const Handler mount_handler = [handler = std::move(handler)](Request& req, Response& res) -> asio::awaitable<Result> {
+    const Handler mount_handler = [handler = std::move(handler)](Request& req,
+                                                                 Response& res) -> asio::awaitable<Result> {
         auto& context = req.route();
         context.route_path = next_route_path(context);
         // The catch-all that connects the sub-router is not one of the request's parameters.
@@ -511,7 +518,9 @@ void mount_impl(const std::shared_ptr<RouterState>& state, std::string_view patt
 
 }  // namespace
 
-void Router::mount(std::string_view pattern, Handler handler) { mount_impl(state_, pattern, std::move(handler), nullptr); }
+void Router::mount(std::string_view pattern, Handler handler) {
+    mount_impl(state_, pattern, std::move(handler), nullptr);
+}
 
 void Router::mount(std::string_view pattern, const Router& router) {
     mount_impl(state_, pattern, Handler{router}, router.state_);
@@ -555,17 +564,16 @@ void Router::subtree(std::string_view pattern, Handler handler) {
     if (path == "/") {
         return;
     }
-    const Registration redirect_route{
-        .methods = methods,
-        .pattern = detail::sub(path, 0, path.size() - 1),
-        .handler = [](Request& req, Response& res) -> asio::awaitable<Result> {
-            std::string location = std::string{req.raw_path()} + "/";
-            if (!req.raw_query().empty()) {
-                location += "?" + std::string{req.raw_query()};
-            }
-            co_return co_await redirect(req, res, location, Status::temporary_redirect);
-        },
-        .implicit = true};
+    const Registration redirect_route{.methods = methods,
+                                      .pattern = detail::sub(path, 0, path.size() - 1),
+                                      .handler = [](Request& req, Response& res) -> asio::awaitable<Result> {
+                                          std::string location = std::string{req.raw_path()} + "/";
+                                          if (!req.raw_query().empty()) {
+                                              location += "?" + std::string{req.raw_query()};
+                                          }
+                                          co_return co_await redirect(req, res, location, Status::temporary_redirect);
+                                      },
+                                      .implicit = true};
     // An existing route on the bare path takes precedence, so the redirect is simply not added.
     const auto shape = detail::pattern_shape(detail::routing_pattern(redirect_route.pattern));
     if (check_claim(*state_->shared, shape, redirect_route)) {
@@ -690,7 +698,8 @@ void Router::freeze() { freeze_all(*state_); }
 asio::awaitable<Result> Router::operator()(Request& request, Response& response) const {
     const auto state = state_;
     if (!state->handler) {
-        co_return co_await not_found_of(*state)(request, response);
+        const Handler not_found = not_found_of(*state);
+        co_return co_await not_found(request, response);
     }
     request.route().active = true;
     const Handler handler = state->handler;

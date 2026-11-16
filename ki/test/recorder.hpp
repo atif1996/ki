@@ -1,12 +1,12 @@
 #pragma once
 
 #include <ki/error.hpp>
-#include <ki/test/export.hpp>
 #include <ki/handler.hpp>
 #include <ki/headers.hpp>
 #include <ki/request.hpp>
 #include <ki/response.hpp>
 #include <ki/status.hpp>
+#include <ki/test/export.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -33,7 +33,8 @@ struct Recorded {
 };
 
 // make_request builds a request with an in-memory body for use with Recorder.
-KI_TEST_EXPORT Request make_request(std::string method, std::string target, Headers headers = {}, std::string body = {});
+KI_TEST_EXPORT Request make_request(std::string method, std::string target, Headers headers = {},
+                                    std::string body = {});
 
 // Recorder runs a handler without a socket, as Go's httptest.ResponseRecorder does. It finishes the response
 // after the handler returns, as the server will.
@@ -43,7 +44,8 @@ public:
 
     // run with cancel_after cancels the handler's pending operation once the delay passes; the handler sees
     // asio::error::operation_aborted, as it would when a client disconnects.
-    KI_TEST_EXPORT static Recorded run(const Handler& handler, Request& request, std::chrono::milliseconds cancel_after);
+    KI_TEST_EXPORT static Recorded run(const Handler& handler, Request& request,
+                                       std::chrono::milliseconds cancel_after);
 
 private:
     static Recorded run_impl(const Handler& handler, Request& request,

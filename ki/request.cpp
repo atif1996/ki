@@ -38,9 +38,8 @@ std::expected<std::string, Error> media_type(std::string_view value) {
         return bad;
     }
     std::string essence{detail::sub(value, 0, type + 1 + subtype)};
-    std::ranges::transform(essence, essence.begin(), [](char c) {
-        return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
-    });
+    std::ranges::transform(essence, essence.begin(),
+                           [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; });
 
     auto rest = detail::sub(value, type + 1 + subtype);
     for (;;) {
@@ -83,10 +82,7 @@ std::expected<std::string, Error> media_type(std::string_view value) {
 }  // namespace
 
 Request::Request(std::string method, std::string target, Headers headers, std::unique_ptr<detail::BodySource> body)
-    : method_{std::move(method)},
-      target_{std::move(target)},
-      headers_{std::move(headers)},
-      body_{std::move(body)} {
+    : method_{std::move(method)}, target_{std::move(target)}, headers_{std::move(headers)}, body_{std::move(body)} {
     if (auto parsed = url::parse_target(method_, target_)) {
         form_ = parsed->form;
         raw_path_ = parsed->path;

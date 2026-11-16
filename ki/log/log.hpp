@@ -106,7 +106,8 @@ public:
         return sink_ && level >= min_level_ && sink_->enabled(level);
     }
 
-    KI_LOG_EXPORT void log(Level level, std::string_view message, std::initializer_list<Attr> attrs = {}) const noexcept;
+    KI_LOG_EXPORT void log(Level level, std::string_view message,
+                           std::initializer_list<Attr> attrs = {}) const noexcept;
     void debug(std::string_view message, std::initializer_list<Attr> attrs = {}) const noexcept {
         log(Level::debug, message, attrs);
     }

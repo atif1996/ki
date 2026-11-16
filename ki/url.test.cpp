@@ -24,8 +24,8 @@ struct EscapeCase {
 // go: TestUnescape (unescapeTests, which decode as QueryUnescape)
 TEST_CASE("unescape decodes escapes and '+' in queries") {
     const std::vector<EscapeCase> ok = {
-        {"", ""}, {"abc", "abc"}, {"1%41", "1A"}, {"1%41%42%43", "1ABC"}, {"%4a", "J"},
-        {"%6F", "o"}, {"a+b", "a b"}, {"a%20b", "a b"},
+        {"", ""},     {"abc", "abc"}, {"1%41", "1A"}, {"1%41%42%43", "1ABC"},
+        {"%4a", "J"}, {"%6F", "o"},   {"a+b", "a b"}, {"a%20b", "a b"},
     };
     for (const auto& c : ok) {
         INFO(c.in);
@@ -149,8 +149,8 @@ TEST_CASE("request targets accepted and rejected as Go's ParseRequestURI does") 
 
 // go: TestRejectControlCharacters
 TEST_CASE("control characters are rejected but non-ASCII bytes are not") {
-    for (const std::string_view target : {"http://foo.com/?foo\nbar", "http\r://foo.com/", "http://foo\x7f.com/",
-                                          "/a\tb", "/a b"}) {
+    for (const std::string_view target :
+         {"http://foo.com/?foo\nbar", "http\r://foo.com/", "http://foo\x7f.com/", "/a\tb", "/a b"}) {
         INFO(target);
         REQUIRE_FALSE(ki::url::parse_target("GET", target).has_value());
     }

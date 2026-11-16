@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <format>
 #include <iterator>
@@ -279,7 +279,8 @@ AsyncSink::~AsyncSink() {
 
 std::error_code AsyncSink::write(const Record& record) noexcept {
     try {
-        OwnedRecord owned{.time = record.time, .level = record.level, .message = std::string{record.message}, .attrs = {}};
+        OwnedRecord owned{
+            .time = record.time, .level = record.level, .message = std::string{record.message}, .attrs = {}};
         owned.attrs.reserve(record.attrs.size());
         for (const auto& attr : record.attrs) {
             owned.attrs.push_back(own(attr));
@@ -317,7 +318,8 @@ void AsyncSink::deliver(const OwnedRecord& record) noexcept {
         for (const auto& attr : record.attrs) {
             attrs.push_back(borrow(attr));
         }
-        (void)inner_->write(Record{.time = record.time, .level = record.level, .message = record.message, .attrs = attrs});
+        (void)inner_->write(
+            Record{.time = record.time, .level = record.level, .message = record.message, .attrs = attrs});
     } catch (...) {
         return;
     }

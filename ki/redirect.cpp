@@ -43,9 +43,11 @@ bool has_scheme(std::string_view url) noexcept {
     }
     const auto scheme = detail::sub(url, 0, colon);
     const auto alpha = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
-    return alpha(scheme.front()) && std::ranges::all_of(scheme, [&](char c) {
-               return alpha(c) || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.';
-           }) && url.find_first_of("/?#") > colon;
+    return alpha(scheme.front()) &&
+           std::ranges::all_of(
+               scheme,
+               [&](char c) { return alpha(c) || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.'; }) &&
+           url.find_first_of("/?#") > colon;
 }
 
 // is_relative reports whether url has neither a scheme nor a host, as Go's url.Parse would see it; "///x"

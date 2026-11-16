@@ -31,9 +31,9 @@ TEST_CASE("add keeps every value and set replaces them") {
 
 // T1.4
 TEST_CASE("invalid header names are rejected and leave the headers unchanged") {
-    const std::string name = GENERATE(std::string{}, std::string{"Bad Name"}, std::string{"Bad:Name"},
-                                      std::string{"Bad\r\nName"}, std::string{"Bad\0Name", 8},
-                                      std::string{"Bad(Name)"}, std::string{"\xC3\xA9t\xC3\xA9"});
+    const std::string name =
+        GENERATE(std::string{}, std::string{"Bad Name"}, std::string{"Bad:Name"}, std::string{"Bad\r\nName"},
+                 std::string{"Bad\0Name", 8}, std::string{"Bad(Name)"}, std::string{"\xC3\xA9t\xC3\xA9"});
     ki::Headers headers;
     REQUIRE(headers.add("Kept", "1"));
     REQUIRE_FALSE(headers.add(name, "v"));
@@ -43,9 +43,8 @@ TEST_CASE("invalid header names are rejected and leave the headers unchanged") {
 
 // T1.4
 TEST_CASE("header values with CR, LF, NUL or other control characters are rejected") {
-    const std::string value = GENERATE(std::string{"a\r\nInjected: yes"}, std::string{"a\nb"},
-                                       std::string{"a\rb"}, std::string{"a\0b", 3}, std::string{"a\x01z"},
-                                       std::string{"a\x7Fz"});
+    const std::string value = GENERATE(std::string{"a\r\nInjected: yes"}, std::string{"a\nb"}, std::string{"a\rb"},
+                                       std::string{"a\0b", 3}, std::string{"a\x01z"}, std::string{"a\x7Fz"});
     ki::Headers headers;
     REQUIRE(headers.add("Kept", "1"));
     REQUIRE_FALSE(headers.add("X-Test", value));

@@ -1,5 +1,6 @@
 // T0.2: the C++23, Asio and llhttp baseline that the rest of ki depends on, checked on every platform.
 
+#include <llhttp.h>
 #include <asio/as_tuple.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
@@ -8,7 +9,6 @@
 #include <asio/this_coro.hpp>
 #include <asio/use_awaitable.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <llhttp.h>
 
 #include <chrono>
 #include <expected>
