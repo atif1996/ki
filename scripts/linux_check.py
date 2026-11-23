@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
-"""Build and test ki with Linux compilers in a local container (Colima, Docker Desktop or any Docker engine).
+"""Build and test ki with Linux compilers in a local container.
 
 Runs the steps of the CI Linux jobs for each compiler: a shared development build with tests and warnings as
 errors, conan create for static and shared packages, the plain CMake consumer checks, and a Ninja build that
 builds the C++ modules where the compiler can. The repository is
 copied into the container, so Linux builds never touch the host's build/ directory. Each compiler keeps its
-Conan package cache in a named Docker volume, so only the first run builds dependencies, and all compilers share
+Conan package cache in a named volume, so only the first run builds dependencies, and all compilers share
 one download cache volume, so dependency sources cross the network once.
+
+The container engine is Apple's container when its service is running, and otherwise any Docker engine, such as
+Colima or Docker Desktop. The two engines keep separate images and volumes.
 """
 
 import argparse
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = "ki-linux-check"
+# Apple's container gives each container its own VM with 1 GB of memory unless told otherwise, too little for
+# parallel C++ builds; Docker engines share one VM whose size is set outside this script.
+APPLE_CPUS = max(2, (os.cpu_count() or 4) - 2)
+APPLE_MEMORY_GIB = min(16, os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") // 2**30 // 2)
 # Each compiler's C++ compiler driver pair, and what KI_MODULES the modules step requires: Clang 19 builds ki's
 # modules, while GCC 14 must fall back to headers without failing the build.
 COMPILERS = {
@@ -63,15 +72,34 @@ def run(cmd):
     return subprocess.run(cmd, check=False).returncode
 
 
+def apple_container_running():
+    """Return whether Apple's container CLI is installed and its service is running."""
+    if not shutil.which("container"):
+        return False
+    status = subprocess.run(["container", "system", "status"], capture_output=True, check=False)
+    if status.returncode != 0:
+        print("note: Apple's container is installed but not running (container system start); using Docker",
+              flush=True)
+    return status.returncode == 0
+
+
 def main():
     """Build the toolchain image, then run the CI Linux steps for each selected compiler."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--compiler", choices=[*COMPILERS, "all"], default="all")
+    parser.add_argument("--engine", choices=["auto", "container", "docker"], default="auto",
+                        help="auto picks Apple's container when its service is running, otherwise Docker")
     args = parser.parse_args()
 
-    if run(["docker", "build", "-t", IMAGE, str(ROOT / "ci" / "linux")]) != 0:
+    engine = args.engine
+    if engine == "auto":
+        engine = "container" if apple_container_running() else "docker"
+    resources = ["--cpus", str(APPLE_CPUS), "--memory", f"{APPLE_MEMORY_GIB}G"] if engine == "container" else []
+    print(f"engine: {engine}", *resources, flush=True)
+
+    if run([engine, "build", "-t", IMAGE, str(ROOT / "ci" / "linux")]) != 0:
         # The rebuild contacts the registry even when nothing changed; carry on offline with the last image.
-        if run(["docker", "image", "inspect", "--format", "{{.Id}}", IMAGE]) != 0:
+        if run([engine, "image", "inspect", IMAGE]) != 0:
             return 1
         print(f"warning: could not rebuild {IMAGE}; using the existing local image", flush=True)
 
@@ -80,7 +108,7 @@ def main():
     for name in names:
         cc, cxx, modules = COMPILERS[name]
         script = STEPS.format(name=name, cc=cc, cxx=cxx, modules=modules)
-        code = run(["docker", "run", "--rm",
+        code = run([engine, "run", "--rm", *resources,
                     "-v", f"{ROOT}:/src:ro",
                     "-v", f"ki-conan-{name}:/root/.conan2",
                     "-v", "ki-conan-downloads:/downloads",

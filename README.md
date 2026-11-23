@@ -166,12 +166,17 @@ and across ki's static libraries.
 ## Linux builds on a Mac
 
 `scripts/linux_check.py` runs the CI Linux steps (GCC 14 and Clang 19 on Ubuntu 24.04) in a local
-container through any Docker engine, such as Colima:
+container. It uses Apple's [container](https://github.com/apple/container) (`brew install container`, then
+`container system start`) when its service is running, and otherwise any Docker engine, such as Colima:
 
 ```sh
 python3 scripts/linux_check.py                  # both compilers
 python3 scripts/linux_check.py --compiler gcc-14
+python3 scripts/linux_check.py --engine docker  # skip Apple's container
 ```
+
+The two engines keep separate images and Conan cache volumes, so the first run on each builds the
+dependencies.
 
 ## Repository checks
 
@@ -185,4 +190,6 @@ python3 scripts/ci_checks.py consumers --deps build/Release/generators --shared
 
 ## License
 
-To be decided.
+ki is licensed under the [Mozilla Public License 2.0](LICENSE): changes to ki's own files must be
+published under the same license, while programs that use ki may carry any license. Parts of ki port code
+and tests from chi, go-radix and Go; their notices are in [LICENSE-THIRD-PARTY.md](LICENSE-THIRD-PARTY.md).
