@@ -10,7 +10,7 @@ from conan.tools.files import copy, load, rmdir
 class KiConan(ConanFile):
     name = "ki"
     description = "chi-style router and Go net/http-style HTTP server for C++23 coroutines"
-    license = "TBD"
+    license = "MPL-2.0"
     topics = ("http", "router", "coroutines", "asio")
     package_type = "library"
     settings = "os", "arch", "compiler", "build_type"

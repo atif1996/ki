@@ -3,7 +3,7 @@
   "name": "ki",
   "version-semver": "0.1.0",
   "description": "chi-style router and Go net/http-style HTTP server for C++23 coroutines",
-  "license": null,
+  "license": "MPL-2.0",
   "builtin-baseline": "d186940b2f0c4e8e5b4ff804af57d2a26fbfa091",
   "dependencies": [
     "asio",

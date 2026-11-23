@@ -56,7 +56,7 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Escaped paths | Go's ServeMux behaviour: paths and patterns are matched after decoding each segment, so `/%61` matches `/a`; a decoded `%2F` never splits a segment and parameter values are decoded once. The router works on a routing form that re-escapes `%`, `/`, `{`, `}` and `*` inside segments. chi's raw-path matching (parameters still encoded) is not kept. |
 | HEAD and path cleaning | Opt-in middleware as in chi (GetHead, CleanPath), enabled in the example server's default stack. |
 | Router lifetime | Routes are registered before serving; the router is frozen when the server starts and later registration returns an error. Matching is lock-free. |
-| Build | CMake ≥ 3.25, presets, Ninja, target-based, `FILE_SET HEADERS`, installed `ki-config.cmake`. No C++ modules yet. |
+| Build | CMake ≥ 3.25, presets, Ninja, target-based, `FILE_SET HEADERS`, installed `ki-config.cmake`. |
 | Packaging | Conan 2 primary (verified locally), vcpkg manifest secondary (verified in CI). CMake uses only `find_package`. |
 | Linkage | Dev builds and CI build **shared** to prove exports and transitive linking; CI also builds static. Consumers default to **static**. Unit tests link the same shared libraries as everything else, so they exercise the exports too; a library's private headers are visible to its own tests because the source root is the build-tree include directory. |
 | Request and Response | Concrete classes, not interfaces. The transport (HTTP/1.1 connection, test recorder, later HTTP/2) sits behind `ki::detail::ResponseTransport` / `BodySource`. Response always tracks status, bytes written and state, so middleware never wraps it. |
@@ -65,6 +65,8 @@ internally. The guarantee is that ki never *throws* for expected conditions, not
 | Cancellation | Every root coroutine ki spawns disables Asio's `throw_if_cancelled`, which otherwise makes each `co_await` after a cancellation throw. Cancellation reaches handlers only as `operation_aborted` error codes. |
 | C++ modules | Headers are the interface. Each library also has a module that re-exports its header API (`import ki;`, `ki.log`, `ki.test`), built as a separate static target (`ki::ki_module`, ...) so header users never depend on module support. `KI_MODULES=AUTO` compiles a module exporting an Asio coroutine at configure time and builds the modules only if it works; elsewhere the build falls back to headers. In November 2026 the check passes on Clang 19 and 23 and fails on Apple Clang 21, GCC 14 and GCC 16.2. CI builds modules on Clang 19 and checks the fallback on GCC 14. |
 | Version source | `project(ki VERSION …)` in `CMakeLists.txt`. The Conan recipe reads it; `vcpkg.json` duplicates it and T0.9 catches drift. |
+| License | MPL-2.0: changes to ki's files stay open, programs using ki may carry any license, and static linking, templates and modules impose nothing further (LGPL's relinking rule would). Ported chi, go-radix and Go code keeps its notices in `LICENSE-THIRD-PARTY.md`. |
+| CI | GitHub Actions, `.github/workflows/build-test.yaml`. |
 | Tests | Catch2 v3. Unit tests sit next to the code as `*.test.cpp`; `tests/conformance` holds the ported suites and `tests/integration` the cross-library tests. chi's test cases ported as the conformance suite; each ported case carries a `// chi: TestName` provenance comment. Where chi panics, ki returns an error and the ported test asserts on it. |
 | First middleware | RequestID, ClientIP (trusted-proxy, rightmost-untrusted — chi's replacement for the deprecated RealIP), Logger, Metrics (RED), Recoverer, Timeout, Heartbeat, StripSlashes, CleanPath, GetHead. |
 | Logging | `ki::log`, modelled on Go's `log/slog`: a `Sink` interface receiving structured records, a `Logger` value type with `with(attrs...)`, built-in `null` / `text` / `json` sinks, asynchronous by default. No logging-library dependency in core. Adapters for Quill or spdlog are optional extras, later. |
@@ -410,6 +412,4 @@ rather than the OTel Prometheus exporter's embedded server; Quill and spdlog ada
 
 | Item | Default until decided |
 |---|---|
-| CI host: GitHub Actions or GitLab | GitHub Actions workflow written; unused until a remote exists |
-| License (required by Conan Center and vcpkg) | `TBD` placeholder in the recipe and manifest |
 | What BSON is needed for (MongoDB or a binary wire format) | Glaze covers both; no BSON-specific work planned |

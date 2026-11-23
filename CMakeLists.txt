@@ -52,6 +52,7 @@ write_basic_package_version_file("${PROJECT_BINARY_DIR}/ki-config-version.cmake"
   COMPATIBILITY SameMinorVersion)
 install(FILES "${PROJECT_BINARY_DIR}/ki-config.cmake" "${PROJECT_BINARY_DIR}/ki-config-version.cmake"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ki")
+install(FILES LICENSE LICENSE-THIRD-PARTY.md DESTINATION "${CMAKE_INSTALL_DOCDIR}")
 if(KI_MODULES_ENABLED)
   install(EXPORT ki-module-targets NAMESPACE ki:: DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/ki"
     CXX_MODULES_DIRECTORY modules)
